@@ -17,7 +17,7 @@ class Model(solvers.IVP):
     # each instance should carry a copy of the PWT data 
     pwt_data, pwt_dep_rates = pwt.load_pwt_data(deltas=True)
         
-    def __init__(self, output, mpk, k_dot, c_dot, jacobian, params):
+    def __init__(self, output, mpk, k_dot, c_dot, utility, jacobian, params):
         """
         Initializes a RamseyModel object with the following attributes:
             
@@ -56,6 +56,15 @@ class Model(solvers.IVP):
                       where the independent variable, t, is time; vec is a 
                       vector of the endogenous variables with ordering [k, c]; 
                       and params is a dictionary of model parameters.
+                      
+            uility:   (callable) Function defining the instantaneous utility 
+                      function used to derive the consumption Euler equation.
+                      Should be of the form 
+                     
+                         u(c, params)
+                        
+                      where c is consumption (per person/effective person) and 
+                      params is a dictionary of model parameters.
             
             jacobian: (callable) Returns the Jacobian matrix of partial 
                       derivatives for the model. Should be of the form

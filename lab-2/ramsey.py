@@ -116,6 +116,54 @@ class Model(solvers.IVP):
         
         return np.array(out)
         
+    def __add_arrows(self, ax, mu=0.25):
+        """
+        Modifies the phase diagram by adding directional arrows.
+        
+        Arguments:
+            
+            ax: (object) AxesSubplot object containing a phase diagram.
+            
+            mu: (float) Controls size of arrows.
+            
+        """
+        # use steady state values to anchor the plot
+        k_star = self.steady_state.values['k_star']
+        c_star = self.steady_state.values['c_star']
+        
+        # define arrow size
+        x_len = mu * k_star 
+        y_len = mu * c_star   
+
+        ax.arrow(x=0.5 * k_star, y=0.5 * c_star, dx=0, dy=y_len, fc='k',
+                 shape='full', lw=1, length_includes_head=True, 
+                 head_width=0.05 * k_star, head_length=0.05 * c_star)
+        ax.arrow(x=0.5 * k_star, y=0.5 * c_star, dx=x_len, dy=0, fc='k',
+                 shape='full', lw=1, length_includes_head=True, 
+                 head_width=0.05 * c_star, head_length=0.05 * k_star)
+
+        ax.arrow(x=0.5 * k_star + x_len, y=1.5 * c_star, dx=0, dy=y_len,
+                 fc='k', shape='full', lw=1, length_includes_head=True, 
+                 head_width=0.05 * k_star, head_length=0.05 * c_star)
+        ax.arrow(x=0.5 * k_star + x_len, y=1.5 * c_star, dx=-x_len, dy=0,
+                 fc='k', shape='full', lw=1, length_includes_head=True, 
+                 head_width=0.05 * c_star, head_length=0.05 * k_star)
+
+        ax.arrow(x=1.5 * k_star, y=0.5 * c_star + y_len, dx=0, dy=-y_len,
+                 fc='k', shape='full', lw=1, length_includes_head=True, 
+                 head_width=0.05 * k_star, head_length=0.05 * c_star)
+        ax.arrow(x=1.5 * k_star, y=0.5 * c_star + y_len, dx=x_len, dy=0,
+                 fc='k', shape='full', lw=1, length_includes_head=True, 
+                 head_width=0.05 * c_star, head_length=0.05 * k_star)
+
+        ax.arrow(x=1.5 * k_star + x_len, y=1.5 * c_star + y_len, dx=0, 
+                 dy=-y_len, fc='k', shape='full', lw=1, 
+                 length_includes_head=True, head_width=0.05 * k_star, 
+                 head_length=0.05 * c_star)          
+        ax.arrow(x=1.5 * k_star + x_len, y=1.5 * c_star + y_len, dx=-x_len, 
+                 dy=0, fc='k', shape='full', lw=1, length_includes_head=True, 
+                 head_width=0.05 * c_star, head_length=0.05 * k_star)
+                     
     def plot_phase_diagram(self, gridmax, N=1000, arrows=False, param=None,  
                            shock=None, reset=True, cmap='winter', mu=0.1):
         """
@@ -193,44 +241,7 @@ class Model(solvers.IVP):
         # axes, labels, title, legend, etc
         ax.set_xlabel('$k_t$', fontsize=15)
         ax.set_ylim(0, 2 * c_star)
-        ax.set_ylabel('$c_t$', rotation='horizontal', fontsize=15)
-        
-        # Add arrows to indicate out of steady-state dynamics
-        if arrows == True:
-            
-            # define arrow size
-            mu = 0.25
-            x_len = mu * k_star 
-            y_len = mu * c_star   
-
-            ax.arrow(x=0.5 * k_star, y=0.5 * c_star, dx=0, dy=y_len, fc='k',
-                     shape='full', lw=1, length_includes_head=True, 
-                     head_width=0.05 * k_star, head_length=0.05 * c_star)
-            ax.arrow(x=0.5 * k_star, y=0.5 * c_star, dx=x_len, dy=0, fc='k',
-                     shape='full', lw=1, length_includes_head=True, 
-                     head_width=0.05 * c_star, head_length=0.05 * k_star)
-
-            ax.arrow(x=0.5 * k_star + x_len, y=1.5 * c_star, dx=0, dy=y_len,
-                     fc='k', shape='full', lw=1, length_includes_head=True, 
-                     head_width=0.05 * k_star, head_length=0.05 * c_star)
-            ax.arrow(x=0.5 * k_star + x_len, y=1.5 * c_star, dx=-x_len, dy=0,
-                     fc='k', shape='full', lw=1, length_includes_head=True, 
-                     head_width=0.05 * c_star, head_length=0.05 * k_star)
-
-            ax.arrow(x=1.5 * k_star, y=0.5 * c_star + y_len, dx=0, dy=-y_len,
-                     fc='k', shape='full', lw=1, length_includes_head=True, 
-                     head_width=0.05 * k_star, head_length=0.05 * c_star)
-            ax.arrow(x=1.5 * k_star, y=0.5 * c_star + y_len, dx=x_len, dy=0,
-                     fc='k', shape='full', lw=1, length_includes_head=True, 
-                     head_width=0.05 * c_star, head_length=0.05 * k_star)
-
-            ax.arrow(x=1.5 * k_star + x_len, y=1.5 * c_star + y_len, dx=0, 
-                     dy=-y_len, fc='k', shape='full', lw=1, 
-                     length_includes_head=True, head_width=0.05 * k_star, 
-                     head_length=0.05 * c_star)          
-            ax.arrow(x=1.5 * k_star + x_len, y=1.5 * c_star + y_len, dx=-x_len, 
-                     dy=0, fc='k', shape='full', lw=1, length_includes_head=True, 
-                     head_width=0.05 * c_star, head_length=0.05 * k_star)
+        ax.set_ylabel('$c_t$', rotation='horizontal', fontsize=15)    
 
         # handles parameter shocks   
         if param != None and shock !=None:
@@ -322,6 +333,10 @@ class Model(solvers.IVP):
             else:
                 raise ValueError
             
+            # Add arrows to indicate out of steady-state dynamics?
+            if arrows == True:
+                self.__add_arrows(ax, mu=0.25)
+                
             # reset the original params and recompute steady state?
             if reset == True:
                 self.update_model_parameters(orig_params)
@@ -330,10 +345,14 @@ class Model(solvers.IVP):
             return [ax, new_k_locus, new_c_locus, new_ss_marker]
         
         else:
-            ax.set_title('Phase diagram for the Ramsey (1928) model', fontsize=20, 
-                         family='serif')
+            ax.set_title('Phase diagram for the optimal growth model', 
+                         fontsize=20, family='serif')
             ax.legend(loc='best', frameon=False)
         
+            # Add arrows to indicate out of steady-state dynamics?
+            if arrows == True:
+                self.__add_arrows(ax, mu=0.25)
+                
             return [ax, k_locus, c_locus, ss_marker]   
         
     def solve_forward_shooting(self, k0, h=1e-3, tol=1.5e-3, mesg=False, 
@@ -888,7 +907,7 @@ class Model(solvers.IVP):
         diff = pol1(grid) - pol2(grid)
         return diff
         
-def calibrate_cobb_douglas(model, iso3_code, x0, method='hybr', theta=1.0):
+def calibrate_cobb_douglas(model, iso3_code, theta0, method='hybr', rho=0.04):
     """
     Calibrates an optimal growth model with Cobb-Douglas production using data 
     from the Penn World Tables (PWT).
@@ -899,7 +918,14 @@ def calibrate_cobb_douglas(model, iso3_code, x0, method='hybr', theta=1.0):
             
         iso3_code: (str) A valid ISO3 country code.
         
-        theta:     (float) Currently theta is treated as a free parameter.
+        theta0:    (float) Initial guess for true value of the coefficient of
+                   relative risk aversion.
+                   
+        method:    (str) Method for solving non-linear equation which chooses 
+                   theta in order that the BGP of the model exhibits the same 
+                   capital-ouput ratio we see in the data.
+                   
+        rho:       (float) Currently discount rate is treated as a free parameter.
                     
     """
     # modify the country attribute
@@ -939,17 +965,17 @@ def calibrate_cobb_douglas(model, iso3_code, x0, method='hybr', theta=1.0):
     # use average depreciation rate for total capital
     delta = model.dep_rates.delta_k.mean()   
          
-    #### estimate the discount rate #####
+    #### estimate the coefficient or relative risk aversion #####
     
     # compute the capital output ratio from the data
     capital_output_ratio = model.data.rkna / model.data.rgdpna
     
-    # discount rate is chosen in order to hit avg. K/Y ratio
+    # theta is chosen in order to match average K/Y ratio
     target = capital_output_ratio.mean()
-    func   = lambda rho: (alpha / (delta + rho + theta * g)) - target
+    func   = lambda theta: (alpha / (delta + rho + theta * g)) - target
     
-    res = optimize.root(func, x0, method=method)
-    rho = res.x[0]
+    res = optimize.root(func, theta0, method=method)
+    theta = res.x[0]
     
     # create a dictionary of model parameters
     params = {'sigma':sigma, 'rho':rho, 'theta':theta, 'alpha':alpha, 

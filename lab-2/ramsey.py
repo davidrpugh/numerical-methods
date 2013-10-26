@@ -888,16 +888,18 @@ class Model(solvers.IVP):
         diff = pol1(grid) - pol2(grid)
         return diff
         
-def calibrate_cobb_douglas(model, iso3_code):
+def calibrate_cobb_douglas(model, iso3_code, x0, method='hybr', theta=1.0):
     """
-    Calibrates a Ramsey model with Cobb-Douglas production using data from the 
-    Penn World Tables (PWT).
+    Calibrates an optimal growth model with Cobb-Douglas production using data 
+    from the Penn World Tables (PWT).
 
     Arguments:
         
         model:     (object) An instance of the SolowModel class.
             
         iso3_code: (str) A valid ISO3 country code.
+        
+        theta:     (float) Currently theta is treated as a free parameter.
                     
     """
     # modify the country attribute
@@ -907,19 +909,19 @@ def calibrate_cobb_douglas(model, iso3_code):
     model.data      = model.pwt_data.minor_xs(iso3_code)
     model.dep_rates = model.pwt_dep_rates.minor_xs(iso3_code)
     
+    ##### force elasticity of substition to be 1 ####
+    sigma = 1.0
+    
     ##### estimate capital's share of income/output ####
     alpha = (1 - model.data.labsh).mean()
-            
-    ##### estimate the fraction of output saved #####
-    s = model.data.csh_i.mean()
         
     ##### estimate the labor force growth rate #####
         
     # regress log employed persons on linear time trend
-    trend = pd.Series(model.data.index, index=model.data.index)
+    N = model.data.index.size
+    trend = pd.Series(np.linspace(0, N - 1, N), index=model.data.index)
     res   = pd.ols(y=np.log(model.data.emp), x=trend)
     n     = res.beta[0]
-    #L0    = np.exp(res.y_fitted[trend.index[0]])
     L0    = np.exp(res.beta[1])
     
     ##### estimate the technology growth rate #####
@@ -930,7 +932,6 @@ def calibrate_cobb_douglas(model, iso3_code):
     # regress log TFP on linear time trend
     res   = pd.ols(y=np.log(model.data.atfpna), x=trend)
     g     = res.beta[0]
-    #A0    = np.exp(res.y_fitted[trend.index[0]])
     A0    = np.exp(res.beta[1])
                            
     ##### estimate the depreciation rate for total capital #####
@@ -938,9 +939,21 @@ def calibrate_cobb_douglas(model, iso3_code):
     # use average depreciation rate for total capital
     delta = model.dep_rates.delta_k.mean()   
          
+    #### estimate the discount rate #####
+    
+    # compute the capital output ratio from the data
+    capital_output_ratio = model.data.rkna / model.data.rgdpna
+    
+    # discount rate is chosen in order to hit avg. K/Y ratio
+    target = capital_output_ratio.mean()
+    func   = lambda rho: (alpha / (delta + rho + theta * g)) - target
+    
+    res = optimize.root(func, x0, method=method)
+    rho = res.x[0]
+    
     # create a dictionary of model parameters
-    params = {'s':s, 'alpha':alpha, 'delta':delta, 'n':n, 'L0':L0, 'g':g,
-              'A0':A0}
+    params = {'sigma':sigma, 'rho':rho, 'theta':theta, 'alpha':alpha, 
+              'delta':delta, 'n':n, 'L0':L0, 'g':g, 'A0':A0}
         
     # update the model's parameters
     model.update_model_parameters(params)

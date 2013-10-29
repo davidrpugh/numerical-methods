@@ -239,10 +239,12 @@ class Model(solvers.IVP):
         ax.set_yticklabels([r'$c^*$'])
         
         # axes, labels, title, legend, etc
-        ax.set_xlabel('$k_t$', fontsize=15)
+        ax.set_xlabel('$k$', fontsize=15)
+        ax.xaxis.set_label_coords(0.95, -0.05)
         ax.set_ylim(0, 2 * c_star)
-        ax.set_ylabel('$c_t$', rotation='horizontal', fontsize=15)    
-
+        ax.set_ylabel('$c$', rotation='horizontal', fontsize=15)    
+        ax.yaxis.set_label_coords(-0.05, 0.95)
+        
         # handles parameter shocks   
         if param != None and shock !=None:
             
@@ -355,6 +357,23 @@ class Model(solvers.IVP):
                 
             return [ax, k_locus, c_locus, ss_marker]   
         
+    def plot_trajectory(self, traj, color='k', ax=None, **kwargs):
+        """
+        Plots the time path of the economy.
+        
+        Arguments:
+            
+            traj: (array) Array representing a time path of the economy.
+            
+            axes: (list) List of AxesSubplot objects on which the trajectory 
+                  should be plotted.
+                  
+        """ 
+        if ax == None:
+            ax = plt.subplot(111)
+                
+        ax.plot(traj[:,1], traj[:,2], color=color, **kwargs)
+            
     def solve_forward_shooting(self, k0, h=1e-3, tol=1.5e-3, mesg=False, 
                                integrator='lsoda', **kwargs):
         """
@@ -907,25 +926,27 @@ class Model(solvers.IVP):
         diff = pol1(grid) - pol2(grid)
         return diff
         
-def calibrate_cobb_douglas(model, iso3_code, theta0, method='hybr', rho=0.04):
+def calibrate_cobb_douglas(model, iso3_code, init_guess, method='hybr', 
+                           rho=0.04):
     """
     Calibrates an optimal growth model with Cobb-Douglas production using data 
     from the Penn World Tables (PWT).
 
     Arguments:
         
-        model:     (object) An instance of the SolowModel class.
+        model:      (object) An instance of the SolowModel class.
             
-        iso3_code: (str) A valid ISO3 country code.
+        iso3_code:  (str) A valid ISO3 country code.
         
-        theta0:    (float) Initial guess for true value of the coefficient of
-                   relative risk aversion.
+        init_guess: (float) Initial guess for true value of the coefficient of
+                    relative risk aversion.
                    
-        method:    (str) Method for solving non-linear equation which chooses 
-                   theta in order that the BGP of the model exhibits the same 
-                   capital-ouput ratio we see in the data.
+        method:     (str) Method for solving non-linear equation which chooses 
+                    theta in order that the BGP of the model exhibits the same 
+                    capital-ouput ratio we see in the data.
                    
-        rho:       (float) Currently discount rate is treated as a free parameter.
+        rho:        (float) Currently discount rate is treated as a free 
+                    parameter.
                     
     """
     # modify the country attribute
@@ -967,14 +988,23 @@ def calibrate_cobb_douglas(model, iso3_code, theta0, method='hybr', rho=0.04):
          
     #### estimate the coefficient or relative risk aversion #####
     
-    # compute the capital output ratio from the data
-    capital_output_ratio = model.data.rkna / model.data.rgdpna
-    
     # theta is chosen in order to match average K/Y ratio
-    target = capital_output_ratio.mean()
-    func   = lambda theta: (alpha / (delta + rho + theta * g)) - target
+    capital_output_ratio = model.data.rkna / model.data.rgdpna
+    target1 = capital_output_ratio.mean()
     
-    res = optimize.root(func, theta0, method=method)
+    # rho is chosen in order to match capital's share 
+    capitals_share = 1 - model.data.labsh
+    target2 = capitals_share.mean()
+    
+    def func(params):
+        # unpack params
+        theta = params
+        
+        # assumes economy is on BGP!
+        out = np.array([(alpha / (delta + rho + theta * g)) - target1])
+        return out
+    
+    res = optimize.root(func, init_guess, method=method)
     theta = res.x[0]
     
     # create a dictionary of model parameters
@@ -1087,7 +1117,6 @@ def calibrate_ces(model, iso3_code, x0, method='Nelder-Mead', tol=1e-9,
                    x=trend.loc[start:end])
                    
     g     = res.beta[0]
-    #A0    = np.exp(res.y_fitted[trend.index[0]])
     A0    = np.exp(res.beta[1])
     
     # create a dictionary of model parameters

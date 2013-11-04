@@ -2,7 +2,7 @@ from __future__ import division
 
 import pandas as pd
 import numpy as np
-from scipy import integrate, interpolate, optimize
+from scipy import integrate, interpolate, linalg, optimize
 #import scikits.bvp_solver as bvp_solver
 
 import matplotlib as mpl
@@ -57,7 +57,7 @@ class Model(solvers.IVP):
                       vector of the endogenous variables with ordering [k, c]; 
                       and params is a dictionary of model parameters.
                       
-            uility:   (callable) Function defining the instantaneous utility 
+            utility:  (callable) Function defining the instantaneous utility 
                       function used to derive the consumption Euler equation.
                       Should be of the form 
                      
@@ -373,7 +373,69 @@ class Model(solvers.IVP):
             ax = plt.subplot(111)
                 
         ax.plot(traj[:,1], traj[:,2], color=color, **kwargs)
+    
+    def solve_linearization(self, k0, ti):
+        """
+        Solves for a first-order Taylor approximation of the stable manifold 
+        in a neighborhood of the long-run steady state of the model.
+        
+        Arguments:
             
+            k0: (float) Initial condition for capital per effective worker.
+            
+            ti: (array) Array of time points at which you wish to compute the 
+                linear approximation of k(t) and c(t).
+                
+        Returns:
+            
+            linearized_traj: (array) Trajectory representing a linear 
+                             approximation of the stable manifold. 
+        
+        """
+        # compute steady state values
+        k_star = self.steady_state.values['k_star']
+        c_star = self.steady_state.values['c_star']
+        
+        # initial condition for predetermined var
+        ktilde0 = k0 - k_star
+         
+        # evaluate the jacobian at steady state
+        eval_jacobian = self.jac(0, [k_star, c_star], self.params)
+        
+        # compute eigen*
+        eigen_vals, eigen_vecs = linalg.eig(eval_jacobian, left=True, 
+                                            right=False)
+        
+        # get indices of stable/unstable eigenvals  
+        stable_idx   = np.where(np.real(eigen_vals) < 0)[0]
+        unstable_idx = np.where(np.real(eigen_vals) > 0)[0]
+        
+        # number of pre-determined variables
+        n_y = stable_idx.size
+                                                                                
+        # decompose matrix of eigenvectors
+        P   = eigen_vecs.T
+        P10 = P[unstable_idx, :n_y]
+        P11 = P[unstable_idx, n_y:]
+        
+        # decompose eigenvalues
+        D0 = eigen_vals[stable_idx]
+                        
+        # compute the path of the pre-determined variables
+        ktilde_traj = ktilde0 * np.exp(D0 * ti[:,np.newaxis])
+        
+        # compute the path of the free-control variables
+        ctilde_traj = -linalg.inv(P11).dot(P10) * ktilde_traj
+        
+        # undo change of variables
+        k_traj = k_star + ktilde_traj
+        c_traj = c_star + ctilde_traj
+        
+        # combine into a model trajectory (cast to real numbers)
+        linearized_traj = np.hstack((ti[:,np.newaxis], k_traj, c_traj)).real
+        
+        return linearized_traj
+        
     def solve_forward_shooting(self, k0, h=1e-3, tol=1.5e-3, mesg=False, 
                                integrator='lsoda', **kwargs):
         """
@@ -418,7 +480,8 @@ class Model(solvers.IVP):
             c_h = self.__get_k_locus(0, [k0], self.params)[0]
         else:
             c_l = self.__get_k_locus(0, [k0], self.params)[0]
-            c_h = (1 - self.params['delta']) * k0 + self.output(0, k0, self.params)
+            c_h = ((1 - self.params['delta']) * k0 + 
+                   self.output(0, k0, self.params))
 
         # default initial guess for c 
         c0 = (c_h + c_l) / 2
@@ -427,7 +490,7 @@ class Model(solvers.IVP):
         ode  = integrate.ode(self.f, self.jac)
         
         # select the integrator
-        ode.set_integrator(integrator, **kwargs)
+        ode.set_integrator(integrator, with_jacobian=True, **kwargs)
         
         # pass the model parameters as additional args
         ode.set_f_params(*self.args)
@@ -965,7 +1028,7 @@ def calibrate_cobb_douglas(model, iso3_code, init_guess, method='hybr',
     ##### estimate the labor force growth rate #####
         
     # regress log employed persons on linear time trend
-    N = model.data.index.size
+    N     = model.data.index.size
     trend = pd.Series(np.linspace(0, N - 1, N), index=model.data.index)
     res   = pd.ols(y=np.log(model.data.emp), x=trend)
     n     = res.beta[0]
@@ -991,20 +1054,13 @@ def calibrate_cobb_douglas(model, iso3_code, init_guess, method='hybr',
     # theta is chosen in order to match average K/Y ratio
     capital_output_ratio = model.data.rkna / model.data.rgdpna
     target1 = capital_output_ratio.mean()
-    
-    # rho is chosen in order to match capital's share 
-    capitals_share = 1 - model.data.labsh
-    target2 = capitals_share.mean()
-    
-    def func(params):
-        # unpack params
-        theta = params
         
-        # assumes economy is on BGP!
-        out = np.array([(alpha / (delta + rho + theta * g)) - target1])
+    def func(theta):
+        """Defines model predicted capital-output ratio on BGP."""
+        out = (alpha / (delta + rho + theta * g)) - target1
         return out
     
-    res = optimize.root(func, init_guess, method=method)
+    res   = optimize.root(func, init_guess, method=method)
     theta = res.x[0]
     
     # create a dictionary of model parameters

@@ -409,8 +409,7 @@ class Model(solvers.IVP):
         
         Arguments:
             
-            method: (str) One of 'linearization', 'forward_shooting', 
-                    'reverse_shooting', or 'multiple_shooting', depending.
+            method: (str) One of 'linearization', or 'forward_shooting'.
             
             param: (string) Model parameter that you wish to shock.
             
@@ -444,7 +443,7 @@ class Model(solvers.IVP):
         w0 = y0 - k0 * r0
         
         # initial padding should be such that shock occurs in '2013'
-        N = 2013 - self.data.index[0]
+        N = 2013 - self.data.index[0] + 1
         time_padding = np.arange(0, N, 1.0)
         
         # transform irfs into per capita or levels, depending
@@ -499,20 +498,25 @@ class Model(solvers.IVP):
         
         # generate post-shock trajectory 
         if method == 'linearization':
-            ti  = np.linspace(0, 2 * T, T)
+            ti  = np.linspace(0, T, T)
             irf = self.solve_linearization(k0, ti) 
                   
         elif method == 'forward_shooting':
             irf = self.solve_forward_shooting(k0)
-        
-        elif method == 'reverse_shooting':
-            pass
-        
-        elif method == 'multiple_shooting':
-            pass
-        
+            
+            # compute some extra repeats of steady state values for padding
+            k_star = self.steady_state.values['k_star']
+            c_star = self.steady_state.values['c_star']
+            
+            extra_time = np.arange(int(irf[-1,0]), T, 1)[:,np.newaxis]
+            extra_kss  = np.repeat(k_star, T - int(irf[-1,0]))[:,np.newaxis]
+            extra_css  = np.repeat(c_star, T - int(irf[-1,0]))[:,np.newaxis]
+            extra_padding = np.hstack((extra_time, extra_kss, extra_css))
+
+            irf = np.vstack((irf, extra_padding))
+            
         else:
-            raise ValueError    
+            raise ValueError, "Invalid 'method' for computing irfs."    
         
         # transform irfs into per capita or levels, depending
         if kind == 'per_capita':
@@ -602,7 +606,6 @@ class Model(solvers.IVP):
         # first need to generate and irf
         irf = self.get_impulse_response(method, param, shock, T, kind, reset)
         
-        
         # create mapping from variables to column indices
         irf_dict = {'k':irf[:,[0,1]], 'c':irf[:,[0,2]], 'y':irf[:,[0,3]], 
                     'r':irf[:,[0,4]], 'w':irf[:,[0,5]]}
@@ -622,65 +625,73 @@ class Model(solvers.IVP):
         if variables == 'all':
             variables = irf_dict.keys()
             
-        fig, axes = plt.subplots(irf.shape[1] - 1, 1, **fig_kw)
-            
+        fig, axes = plt.subplots(len(variables), 1, squeeze=False, **fig_kw)
+          
         for i, var in enumerate(variables): 
                 
             # extract the time series
             traj = irf_dict[var]
                 
             # plot the irf
-            self.plot_trajectory(traj, color, axes[i], phase_space=False)
+            self.plot_trajectory(traj, color, axes[i,0], phase_space=False)
                 
-            # adjust y-axis limits
-            axes[i].set_ylim(0.95 * traj[:,1].min(), 1.05 * traj[:,1].max())
+            # adjust axis limits
+            axes[i,0].set_ylim(0.95 * traj[:,1].min(), 1.05 * traj[:,1].max())
+            axes[i,0].set_xlim(2000, 2013 + T)
                 
             # y axis labels depend on kind of irfs
             if kind == 'per_capita':
                   
-                if var in ['k', 'y', 'c']:
-                    axes[i].plot(traj[:,0], traj[0,1] * np.exp(self.params['g'] * traj[:,0]), 'k--')
-                    axes[i].set_ylabel(r'$\frac{%s}{L}(t)$' %var.upper(), 
-                                       rotation='horizontal', fontsize=15, 
-                                       family='serif')
-                elif var == 'w':
-                    axes[i].plot(traj[:,0], traj[0,1] * np.exp(self.params['g'] * traj[:,0]), 'k--')
-                    axes[i].set_ylabel('$%s(t)$' %var.upper(), 
-                                       rotation='horizontal', fontsize=15, 
-                                       family='serif')
+                ti = traj[:,0] - self.data.index[0]
+                gr = self.params['g']
+                    
+                if var in ['k', 'y', 'c']:                     
+                    axes[i,0].plot(traj[:,0], traj[0,1] * np.exp(gr * ti), 'k--')
+                    axes[i,0].set_ylabel(r'$\frac{%s}{L}(t)$' %var.upper(), 
+                                         rotation='horizontal', fontsize=15, 
+                                         family='serif')
+                elif var == 'w': 
+                    axes[i,0].plot(traj[:,0], traj[0,1] * np.exp(gr * ti), 'k--')
+                    axes[i,0].set_ylabel('$%s(t)$' %var.upper(), 
+                                         rotation='horizontal', fontsize=15, 
+                                         family='serif')
                 elif var == 'r':
-                    axes[i].set_ylabel('$%s(t)$' %var, 
-                                       rotation='horizontal', fontsize=15, 
-                                       family='serif')
+                    axes[i,0].set_ylabel('$%s(t)$' %var, 
+                                         rotation='horizontal', fontsize=15, 
+                                         family='serif')
                                                
             elif kind == 'levels':
+                ti = traj[:,0] - self.data.index[0]
+                gr = self.params['n'] + self.params['g']
                     
-                if var in ['k', 'y', 'c']:
-                    axes[i].set_ylabel('$%s(t)$' %var.upper(), 
-                                       rotation='horizontal', fontsize=15, 
-                                       family='serif')
+                if var in ['k', 'y', 'c']:   
+                    axes[i,0].plot(traj[:,0], traj[0,1] * np.exp(gr * ti), 'k--')
+                    axes[i,0].set_ylabel('$%s(t)$' %var.upper(), 
+                                         rotation='horizontal', fontsize=15, 
+                                         family='serif')
                 elif var == 'w':
-                    axes[i].set_ylabel('$%sL(t)$' %var.upper(), 
-                                       rotation='horizontal', fontsize=15, 
-                                       family='serif')
+                    axes[i,0].plot(traj[:,0], traj[0,1] * np.exp(gr * ti), 'k--')
+                    axes[i,0].set_ylabel('$%sL(t)$' %var.upper(), 
+                                         rotation='horizontal', fontsize=15, 
+                                         family='serif')
                 elif var == 'r':
-                    axes[i].set_ylabel('$%s(t)$' %var, 
-                                       rotation='horizontal', fontsize=15, 
-                                       family='serif')
+                    axes[i,0].set_ylabel('$%s(t)$' %var, 
+                                         rotation='horizontal', fontsize=15, 
+                                         family='serif')
                                                
             else:
-                axes[i].set_ylabel('$%s(t)$' %var, rotation='horizontal', 
-                                   fontsize=15, family='serif')
+                axes[i,0].set_ylabel('$%s(t)$' %var, rotation='horizontal', 
+                                     fontsize=15, family='serif')
                                        
             # adjust location of y-axis label
-            axes[i].yaxis.set_label_coords(-0.1, 0.45)
+            axes[i,0].yaxis.set_label_coords(-0.1, 0.45)
     
             # log the y-scale for the plots
             if log == True:
-                axes[i].set_yscale('log')
+                axes[i,0].set_yscale('log')
                     
-        axes[0].set_title(tit, family='serif', fontsize=20)
-        axes[-1].set_xlabel('Year, $t$,', fontsize=15, family='serif')
+        axes[0,0].set_title(tit, family='serif', fontsize=20)
+        axes[-1,0].set_xlabel('Year, $t$,', fontsize=15, family='serif')
         
         return [fig, axes]
     
@@ -746,7 +757,7 @@ class Model(solvers.IVP):
         
         return linearized_traj
         
-    def solve_forward_shooting(self, k0, h=1e-1, tol=1.5e-3, mesg=False, 
+    def solve_forward_shooting(self, k0, h=1e-1, tol=1.5e-4, mesg=False, 
                                integrator='dopri5', **kwargs):
         """
         Computes the full, non-linear saddle path for the continuous time 

@@ -99,7 +99,26 @@ class Model(solvers.IVP):
         
         # initialize an empty SteadyState object
         self.steady_state = steady_states.SteadyState(self)    
-                
+     
+    def evaluate_jacobian(self, vec):
+        """
+        Wraps the model's Jacobian so that it can be evaluated at a point in
+        phase space.
+        
+        Arguments:
+            
+            vec: (array-like) Array of values for capital and consumption 
+                 (per worker/effective worker) k, c at which to evaluate the
+                 Jacobian.
+                 
+        Returns:
+            
+            evaluated_jac: (float) Jacobian evaluated at the point vec.
+                 
+        """ 
+        evaluated_jac = self.jac(0, vec, self.params)
+        return evaluated_jac
+                            
     def update_model_parameters(self, new_params):
         """Updates the model's parameter dictionary."""
         self.args = (new_params.copy(),) + self.args[1:]
@@ -335,7 +354,7 @@ class Model(solvers.IVP):
             else:
                 raise ValueError
             
-            # Add arrows to indicate out of steady-state dynamics?
+            # add arrows to indicate out of steady-state dynamics?
             if arrows == True:
                 self.__add_arrows(ax, mu=0.25)
                 
@@ -357,22 +376,302 @@ class Model(solvers.IVP):
                 
             return [ax, k_locus, c_locus, ss_marker]   
         
-    def plot_trajectory(self, traj, color='k', ax=None, **kwargs):
+    def plot_trajectory(self, traj, color='b', ax=None, kind='phase_space', 
+                        **kwargs):
         """
         Plots the time path of the economy.
         
         Arguments:
             
-            traj: (array) Array representing a time path of the economy.
+            traj:     (array) Array representing a time path of the economy. 
+                      If `kind` is set to `time_series', then the first column 
+                      of traj should be the time index against which any 
+                      additional columns should be plotted. 
             
-            axes: (list) List of AxesSubplot objects on which the trajectory 
-                  should be plotted.
-                  
+            color:    (varies) Valid matplotlib color specification.
+            
+            ax:       (object) AxesSubplot object on which the trajectory 
+                      should be plotted.
+                   
+            kind:     (str) One of 'phase_space' or 'time_series', depending.
+            
+            **kwargs: (dict) Dictionary of optional keyword arguments to pass
+                      to ax.plot method.
+                   
         """ 
         if ax == None:
             ax = plt.subplot(111)
                 
-        ax.plot(traj[:,1], traj[:,2], color=color, **kwargs)
+        if kind == 'phase_space':
+            ax.plot(traj[:,1], traj[:,2], color=color, **kwargs)
+            
+        elif kind == 'time_series':
+            ax.plot(traj[:,0], traj[:,1], color=color, **kwargs)
+        
+        else:
+            raise ValueError
+    
+    def get_impulse_response(self, method, param, shock, T=100, 
+                             kind='efficiency_units', reset=True):
+        """
+        Generates an impulse response functions for the endogenous variables in
+        the model following a shock to one of the model parameters.
+        
+        Arguments:
+            
+            method: (str) One of 'linearization', 'forward_shooting', 
+                    'reverse_shooting', or 'multiple_shooting', depending.
+            
+            param: (string) Model parameter that you wish to shock.
+            
+            shock: (float) Multiplicative shock to the parameter. Values < 1 
+                   correspond to a reduction in the current value of the 
+                   parameter; values > 1 correspond to increasing the current 
+                   value of the parameter.
+                   
+            T:     (float) Length of the impulse response. Default is 40.
+            
+            kind:  (str) Whether you want impulse response functions in 'levels',
+                   'per_capita', or 'efficiency_units'. Default is for irfs to
+                   be in 'efficiency_units'.
+                   
+            reset: (boolean) Whether or not to reset the original parameters to
+                   their pre-shock values. Default is True.
+            
+        Returns:
+            
+            irf: (array-like) Impulse response function.
+            
+        """
+        # copy the original params
+        orig_params = self.params.copy()
+        
+        # economy is initial in steady state
+        k0 = self.steady_state.values['k_star']
+        c0 = self.steady_state.values['c_star']
+        y0 = self.output(0, k0, self.params)
+        r0 = self.mpk(0, k0, self.params) - self.params['delta']
+        w0 = y0 - k0 * r0
+        
+        # initial padding should be such that shock occurs in '2013'
+        N = 2013 - self.data.index[0]
+        time_padding = np.arange(0, N, 1.0)
+        
+        # transform irfs into per capita or levels, depending
+        if kind == 'per_capita':
+            A0 = self.params['A0']
+            g  = self.params['g']
+            factor = A0 * np.exp(g * time_padding)
+            
+        elif kind == 'levels':
+            A0 = self.params['A0']
+            g  = self.params['g']
+            L0 = self.params['L0']
+            n  = self.params['n']
+            factor = A0 * L0 * np.exp((n + g) * time_padding)
+            
+        elif kind == 'efficiency_units':
+            factor = np.ones(N)
+        
+        else:
+            raise ValueError
+            
+        # start with N periods of steady state values
+        padding_k = np.repeat(k0, N)
+        padding   = np.hstack((time_padding[:,np.newaxis], 
+                              (factor * padding_k)[:,np.newaxis]))
+        
+        # padding for c
+        padding_c = np.repeat(c0, N)
+        padding = np.hstack((padding, (factor * padding_c)[:,np.newaxis]))
+        
+        # padding for y
+        padding_y = np.repeat(y0, N)
+        padding = np.hstack((padding, (factor * padding_y)[:,np.newaxis]))
+        
+        # padding for r (r is same regardless of 'kind')
+        padding_r = np.repeat(r0, N)
+        padding = np.hstack((padding, padding_r[:,np.newaxis]))
+        
+        # padding for w 
+        padding_w = np.repeat(w0, N)
+        padding = np.hstack((padding, (factor * padding_w)[:,np.newaxis]))
+        
+        # move time padding forward to start of available data
+        padding[:,0] += self.data.index[0]
+                    
+        # shock the parameter
+        self.params[param] = shock * self.params[param]
+        self.update_model_parameters(self.params)
+        
+        # compute the new steady state values
+        self.steady_state.set_values()
+        
+        # generate post-shock trajectory 
+        if method == 'linearization':
+            ti  = np.linspace(0, 2 * T, T)
+            irf = self.solve_linearization(k0, ti) 
+                  
+        elif method == 'forward_shooting':
+            irf = self.solve_forward_shooting(k0)
+        
+        elif method == 'reverse_shooting':
+            pass
+        
+        elif method == 'multiple_shooting':
+            pass
+        
+        else:
+            raise ValueError    
+        
+        # transform irfs into per capita or levels, depending
+        if kind == 'per_capita':
+            g      = self.params['g']            
+            factor = factor[-1] * np.exp(g * irf[:,0])
+            
+        elif kind == 'levels':
+            g      = self.params['g']
+            n      = self.params['n'] 
+            factor = factor[-1] * np.exp((n + g) * irf[:,0])
+            
+        elif kind == 'efficiency_units':
+            factor = np.ones(irf[:,0].size)
+        
+        else:
+            raise ValueError
+        
+        # shift the time index forward 2013 periods
+        irf[:,0] += 2013
+        
+        # compute the irf for y
+        irf_y = self.output(irf[:,0], irf[:,1], self.params)
+        irf = np.hstack((irf, (factor * irf_y)[:,np.newaxis]))
+        
+        # compute the irf for r
+        irf_r = self.mpk(irf[:,0], irf[:,1], self.params) - self.params['delta']
+        irf = np.hstack((irf, irf_r[:,np.newaxis]))
+        
+        # compute the irf for w
+        irf_w = irf_y - irf_r * irf[:,1]
+        irf = np.hstack((irf, (factor * irf_w)[:,np.newaxis]))
+        
+        # compute the irf for k (after computing irfs for y, r, and w!)
+        irf[:,1] = (factor * irf[:,1])
+        
+        # add the padding
+        irf = np.vstack((padding, irf))
+        
+        # reset the original params and recompute steady state?
+        if reset == True:
+            self.update_model_parameters(orig_params)
+            self.steady_state.set_values()
+        
+        return irf 
+    
+    def plot_impulse_response(self, variables, method, param, shock, T, 
+                              color='b', kind='efficiency_units', log=False, 
+                              reset=True, **fig_kw):
+        """
+        Plots an impulse response function.
+        
+        Arguments:
+            
+            variables:
+                
+            method:
+                    
+            param: (string) Model parameter.
+            
+            shock: (float) Shock to the parameter. Values < 1 correspond to a
+                   reducing the current value of the parameter; values > 1
+                   correspond to increasing the current value of the parameter.
+                   
+            T:     (float) Length of the impulse response. Default is 40.
+            
+            kind:  (str) Whether you want impulse response functions in 'levels',
+                   'per_capita', or 'efficiency_units'. Default is for irfs to
+                   be in 'efficiency_units'.
+                   
+            log:   (boolean) Whether or not to have logarithmic scales on the
+                   vertical axes. Default is False.
+                   
+            reset: (boolean) Whether or not to reset the original parameters to
+                   their pre-shock values. Default is True.
+            
+        Returns: A list containing...
+        
+        """
+        # first need to generate and irf
+        irf = self.get_impulse_response(method, param, shock, T, kind, reset)
+        
+        # create mapping from variables to column indices
+        indices = {'k':1, 'c':2, 'y':3, 'r':4, 'w':5}
+        
+        # necessary for pretty latex printing
+        if param in ['alpha', 'delta', 'sigma', 'theta', 'rho']:
+            param = '\\' + param
+            
+        # title depends on whether shock was positive or negative
+        if shock > 1.0:
+            tit = 'Impulse response following + shock to $%s$' % param
+        elif shock < 1.0:
+            tit = 'Impulse response following - shock to $%s$' % param
+        else:
+            tit = 'Impulse response following NO shock to $%s$' % param
+
+        if variables == 'all':
+            
+            fig, axes = plt.subplots(irf.shape[1], 1, sharex=True, **fig_kw)
+            
+            for var, index in indices.iteritems(): 
+                
+                self.plot_trajectory(irf[:,[0, index]], color, axes[index], 'time_series')
+                
+                if kind == 'efficiency_units':
+                    axes[index].set_ylabel('$%s(t)$' %var, rotation='horizontal', fontsize=15, 
+                       family='serif')
+                           
+                elif kind == 'per_capita':
+                    
+                    if var in ['k', 'y', 'c']:
+                        axes[index].set_ylabel('$\frac{%s}{L}(t)$' %var.upper(), 
+                                               rotation='horizontal', fontsize=15, 
+                                               family='serif')
+                    elif var == 'w':
+                        axes[index].set_ylabel('$%s(t)$' %var.upper(), 
+                                               rotation='horizontal', fontsize=15, 
+                                               family='serif')
+                    elif var == 'r':
+                        axes[index].set_ylabel('$%s(t)$' %var, 
+                                               rotation='horizontal', fontsize=15, 
+                                               family='serif')
+                                               
+                elif kind == 'levels':
+                    
+                    if var in ['k', 'y', 'c']:
+                        axes[index].set_ylabel('$%s(t)$' %var.upper(), 
+                                               rotation='horizontal', fontsize=15, 
+                                               family='serif')
+                    elif var == 'w':
+                        axes[index].set_ylabel('$%sL(t)$' %var.upper(), 
+                                               rotation='horizontal', fontsize=15, 
+                                               family='serif')
+                    elif var == 'r':
+                        axes[index].set_ylabel('$%s(t)$' %var, 
+                                               rotation='horizontal', fontsize=15, 
+                                               family='serif')
+             
+                axes[index].yaxis.set_label_coords(-0.055, 0.45)
+        
+                # log the y-scale for the plots
+                if log == True:
+                    axes[index].set_yscale('log')
+                    
+            axes[0].set_title(tit, family='serif', fontsize=20)
+            axes[-1].set_xlabel('Time, $t$,', fontsize=15, family='serif')
+            #ax3.yaxis.set_label_coords(-0.055, 0.45)
+            
+        return [fig, axes]
     
     def solve_linearization(self, k0, ti):
         """
@@ -436,8 +735,8 @@ class Model(solvers.IVP):
         
         return linearized_traj
         
-    def solve_forward_shooting(self, k0, h=1e-3, tol=1.5e-3, mesg=False, 
-                               integrator='lsoda', **kwargs):
+    def solve_forward_shooting(self, k0, h=1e-1, tol=1.5e-3, mesg=False, 
+                               integrator='dopri5', **kwargs):
         """
         Computes the full, non-linear saddle path for the continuous time 
         version of the Ramsey model using the 'forward shooting' algorithm (see 
@@ -490,7 +789,7 @@ class Model(solvers.IVP):
         ode  = integrate.ode(self.f, self.jac)
         
         # select the integrator
-        ode.set_integrator(integrator, with_jacobian=True, **kwargs)
+        ode.set_integrator(integrator, **kwargs)
         
         # pass the model parameters as additional args
         ode.set_f_params(*self.args)
@@ -617,12 +916,17 @@ class Model(solvers.IVP):
         k_star = self.steady_state.values['k_star']
         c_star = self.steady_state.values['c_star']
 
+        # evaluate the jacobian at steady state
+        evaluated_jacobian = self.jac(0, [k_star, c_star], self.params)
+        
+        # compute eigenvalues and eigenvectors for evaluated_jacobian
+        vals, vecs = linalg.eig(evaluated_jacobian)
+        
         # find index of the stable eigenvalue
-        index = np.where(np.real(self.steady_state.eigenvalues) < 0)[0][0]
+        stable_idx = np.where(np.real(vals) < 0)[0][0]
         
         # local slope of optimal policy evaluated at steady state
-        Ck_prime = (self.steady_state.eigenvectors[1, index] / 
-                    self.steady_state.eigenvectors[0, index])
+        Ck_prime = vecs[1, stable_idx] / vecs[0, stable_idx]
         
         # RHS of equation 10.7.5 from Judd (1998)
         c_prime = lambda k, c, params: (self.c_dot(0, [k, c], params) / 
@@ -637,28 +941,42 @@ class Model(solvers.IVP):
         # pass the model parameters as additional args
         ode.set_f_params(*self.args)
         
-        # set initial conditions
         if k0 > k_star:
+            # set initial conditions
             ode.set_initial_value(c_star + eps * Ck_prime, k_star + eps)
-        else:
-            ode.set_initial_value(c_star - eps * Ck_prime, k_star - eps)
-        
-        # create a storage container for the trajectory
-        solution = np.hstack((ode.t, ode.y)) 
-        
-        # generate a solution trajectory
-        while ode.successful():               
-            ode.integrate(ode.t + h, step, relax)
-            current_step = np.hstack((ode.t, ode.y))
-            solution = np.vstack((solution, current_step))  
             
-            # check to see if initial condition has been reached
-            if k0 < k_star and ode.t < k0:
-                break
-            elif k0 > k_star and ode.t > k0:
-                break
-            else:
-                continue 
+            # create a storage container for the trajectory
+            solution = np.hstack((ode.t, ode.y)) 
+        
+            # generate a solution trajectory
+            while ode.successful():               
+                ode.integrate(ode.t + h, step, relax)
+                current_step = np.hstack((ode.t, ode.y))
+                solution = np.vstack((solution, current_step))  
+            
+                # check to see if initial condition has been reached
+                if ode.t > k0:
+                    break
+                else:
+                    continue 
+        else:
+            # set initial condition
+            ode.set_initial_value(c_star - eps * Ck_prime, k_star - eps)
+            
+            # create a storage container for the trajectory
+            solution = np.hstack((ode.t, ode.y)) 
+        
+            # generate a solution trajectory
+            while ode.successful():               
+                ode.integrate(ode.t - h, step, relax)
+                current_step = np.hstack((ode.t, ode.y))
+                solution = np.vstack((solution, current_step))  
+            
+                # check to see if initial condition has been reached
+                if ode.t < k0:
+                    break
+                else:
+                    continue
         
         return solution
     
@@ -710,11 +1028,10 @@ class Model(solvers.IVP):
         sol = bvp_solver.solve(bvp, solution_guess = solution_guess, **kwargs)
         
         return sol
-        
+       
     def get_stable_manifold(self, kmin, kmax, method=None, **kwargs):
         """
-        Computes the stable manifold for the Ramsey model using either 'forward'
-        or 'reverse' shooting, depending on whether 'tol' or 'eps' is specified.
+        Computes the stable manifold for the optimal growth model.
         
         Arguments:
                         
@@ -793,7 +1110,7 @@ class Model(solvers.IVP):
                  Ramsey model. 
                  
         """
-        if method == 'reverse':
+        if method == 'reverse_shooting':
             
             # extract the keyword args for 'reverse' shooting
             h           = kwargs.get('h', 1.0)
@@ -801,7 +1118,7 @@ class Model(solvers.IVP):
             integrator  = kwargs.get('integrator', 'dopri')
             options     = kwargs.get('options', {})
             
-            lower_M_S = self.solve_reverse_shooting(kmin, -h, eps, integrator, 
+            lower_M_S = self.solve_reverse_shooting(kmin, h, eps, integrator, 
                                                     **options)
             upper_M_S = self.solve_reverse_shooting(kmax, h, eps, integrator, 
                                                     **options)
@@ -809,7 +1126,7 @@ class Model(solvers.IVP):
             # reverse the direction of lower_M_S
             lower_M_S = lower_M_S[::-1]
         
-        elif method == 'forward':
+        elif method == 'forward_shooting':
             
             # extract the keyword args for 'forward' shooting
             h           = kwargs.get('h', 1.0)
@@ -829,7 +1146,7 @@ class Model(solvers.IVP):
             lower_M_S = lower_M_S[:,1:]
             upper_M_S = upper_M_S[:,1:]
             
-        elif method == 'multiple':
+        elif method == 'multiple_shooting':
             
             # extract the keywords for 'multiple' shooting
             T                   = kwargs.get('T', 1e3)
@@ -866,7 +1183,8 @@ class Model(solvers.IVP):
         
         return M_S
 
-    def get_consumption_policy(self, kmin, kmax, method='multiple', **kwargs):
+    def get_consumption_policy(self, kmin=None, kmax=None, method='reverse', 
+                               deg=3, **kwargs):
         """
         Constructs a callable representation of the representative household's
         consumption policy function. 
@@ -881,12 +1199,13 @@ class Model(solvers.IVP):
                         effective person) for the upper portion of the stable
                         manifold.
                                  
-            method:     (str) One of 'forward', 'reverse', or 'multiple', 
-                        depending.
+            method:     (str) One of 'linearization', 'forward_shooting', 
+                        'reverse_shooting', or 'multiple_shooting', depending.
                         
-            **kwargs:   (dict) Dictionary of method specific keyword args. For
-                        method = 'forward' the following keyword arguments are 
-                        required:
+            **kwargs:   (dict) Dictionary of method specific keyword arguments. 
+    
+                        For method = 'forward_shooting' the following keyword 
+                        arguments are required:
                             
                             h:          (float) Step-size to use for the 
                                         integration. Default is 1.0.
@@ -936,7 +1255,7 @@ class Model(solvers.IVP):
                                                  initial guess for the true 
                                                  solution. Default is None.
             
-                            boundary_conditions: (callable): A function with 
+                            boundary_conditions: (callable): A function which 
                                                  calculates the difference 
                                                  between the actual boundary 
                                                  conditions and the desired
@@ -953,143 +1272,121 @@ class Model(solvers.IVP):
             c_k: (callable) A callable object representing the consumption 
                  policy function.
                  
-        """
-        # extract keyword args
-        k = kwargs.get('k', 3)
-            
-        # compute the stable manifold
-        M_S = self.get_stable_manifold(kmin, kmax, method, **kwargs)
+        """        
+        if method in ['forward_shooting', 'reverse_shooting', 'multiple_shooting']:    
         
-        # construct a callable B-spline repr of the policy function
-        c_k = interpolate.UnivariateSpline(M_S[:,0], M_S[:,1], k=k, s=0)                   
-                            
+            # compute the stable manifold
+            M_S = self.get_stable_manifold(kmin, kmax, method, **kwargs)
+        
+            # construct a callable B-spline repr of the policy function
+            c_k = interpolate.UnivariateSpline(M_S[:,0], M_S[:,1], k=deg, s=0)                   
+        
+        elif method == 'linearization':
+            
+            # compute steady state values
+            k_star = self.steady_state.values['k_star']
+            c_star = self.steady_state.values['c_star']
+                 
+            # evaluate the jacobian at steady state
+            eval_jacobian = self.jac(0, [k_star, c_star], self.params)
+        
+            # compute eigen*
+            eigen_vals, eigen_vecs = linalg.eig(eval_jacobian, left=True, 
+                                                right=False)
+        
+            # get indices of stable/unstable eigenvals  
+            stable_idx   = np.where(np.real(eigen_vals) < 0)[0]
+            unstable_idx = np.where(np.real(eigen_vals) > 0)[0]
+        
+            # number of pre-determined variables
+            n_y = stable_idx.size
+                                                                                
+            # decompose matrix of eigenvectors
+            P   = eigen_vecs.T
+            P10 = P[unstable_idx, :n_y]
+            P11 = P[unstable_idx, n_y:]                        
+        
+            # compute the consumption policy function
+            c_k = lambda k: c_star - linalg.inv(P11).dot(P10) * (k - k_star)
+     
+        else:
+            raise ValueError, "Invalid 'method'!" 
+                              
         return c_k
 
-    def compare_policies(self, pol1, pol2, grid):
+    def compare_policies(self, pol1, pol2, grid, metric='L2'):
         """
         Compare two consumption policy functions at common grid points.
         
         Arguments:
             
-            pol1: (callable) Consumption policy function computed using the 
-                  get_consumption_policy method.
+            pol1:   (callable) Consumption policy function computed using the 
+                    get_consumption_policy method.
                   
-            pol2: (callable) Consumption policy function computed using the 
-                  get_consumption_policy method.
+            pol2:   (callable) Consumption policy function computed using the 
+                    get_consumption_policy method.
                   
-            grid: (array-like) Grid of values for capital per effective worker
-                  at which to compare the two policy functions.
+            grid:   (array-like) Grid of values for capital (per person/
+                    effective person) at which to compare the two policy 
+                    functions.
+                  
+            metric: (str) One of 'L2', 'maximal', or None depending on whether 
+                    you wish to compute L2 errors, maximal errors, or the simple
+                    element-wise difference difference between the two policies.
                   
         Returns:
             
-            diff: (array) Array of element-wise differences between the two 
-                  policy functions.
+            error: (array) Returns the L2 error, maximal error, or element-wise
+                   difference between the two policies.
         
         """
         diff = pol1(grid) - pol2(grid)
-        return diff
         
-def calibrate_cobb_douglas(model, iso3_code, init_guess, method='hybr', 
-                           rho=0.04):
-    """
-    Calibrates an optimal growth model with Cobb-Douglas production using data 
-    from the Penn World Tables (PWT).
-
-    Arguments:
-        
-        model:      (object) An instance of the SolowModel class.
+        if metric == 'L2':
+            error = np.sum(diff**2)
+        elif metric == 'maximal':
+            error = np.abs(diff)
+        elif metric == None:
+            error = diff
+        else:
+            ValueError
             
-        iso3_code:  (str) A valid ISO3 country code.
+        return error
         
-        init_guess: (float) Initial guess for true value of the coefficient of
-                    relative risk aversion.
-                   
-        method:     (str) Method for solving non-linear equation which chooses 
-                    theta in order that the BGP of the model exhibits the same 
-                    capital-ouput ratio we see in the data.
-                   
-        rho:        (float) Currently discount rate is treated as a free 
-                    parameter.
-                    
+def calibrate_ces(model, iso3_code, bounds=None, sigma0=1.0, alpha0=None, 
+                  theta0=2.5, rho=0.04):
     """
-    # modify the country attribute
-    model.iso3_code = iso3_code
-        
-    # get the PWT data for the iso_code
-    model.data      = model.pwt_data.minor_xs(iso3_code)
-    model.dep_rates = model.pwt_dep_rates.minor_xs(iso3_code)
-    
-    ##### force elasticity of substition to be 1 ####
-    sigma = 1.0
-    
-    ##### estimate capital's share of income/output ####
-    alpha = (1 - model.data.labsh).mean()
-        
-    ##### estimate the labor force growth rate #####
-        
-    # regress log employed persons on linear time trend
-    N     = model.data.index.size
-    trend = pd.Series(np.linspace(0, N - 1, N), index=model.data.index)
-    res   = pd.ols(y=np.log(model.data.emp), x=trend)
-    n     = res.beta[0]
-    L0    = np.exp(res.beta[1])
-    
-    ##### estimate the technology growth rate #####
-        
-    # adjust measure of TFP to remove human capital contribution
-    model.data['atfpna'] = model.data.rtfpna**(1 / (1 - alpha)) * model.data.hc
-        
-    # regress log TFP on linear time trend
-    res   = pd.ols(y=np.log(model.data.atfpna), x=trend)
-    g     = res.beta[0]
-    A0    = np.exp(res.beta[1])
-                           
-    ##### estimate the depreciation rate for total capital #####
-        
-    # use average depreciation rate for total capital
-    delta = model.dep_rates.delta_k.mean()   
-         
-    #### estimate the coefficient or relative risk aversion #####
-    
-    # theta is chosen in order to match average K/Y ratio
-    capital_output_ratio = model.data.rkna / model.data.rgdpna
-    target1 = capital_output_ratio.mean()
-        
-    def func(theta):
-        """Defines model predicted capital-output ratio on BGP."""
-        out = (alpha / (delta + rho + theta * g)) - target1
-        return out
-    
-    res   = optimize.root(func, init_guess, method=method)
-    theta = res.x[0]
-    
-    # create a dictionary of model parameters
-    params = {'sigma':sigma, 'rho':rho, 'theta':theta, 'alpha':alpha, 
-              'delta':delta, 'n':n, 'L0':L0, 'g':g, 'A0':A0}
-        
-    # update the model's parameters
-    model.update_model_parameters(params)
-                    
-    # compute new steady state values
-    model.steady_state.set_values()
-
-def calibrate_ces(model, iso3_code, x0, method='Nelder-Mead', tol=1e-9, 
-                  bounds=None):
-    """
-    Calibrates a Solow model with constant elasticity of substition (CES)
-    production using data from the Penn World Tables (PWT).
+    Calibrates an optimal growth model with constant elasticity of substition 
+    (CES) production using data from the Penn World Tables (PWT).
 
     Arguments:
         
-        model:     (object) An instance of the SolowModel class.
+        model:     (object) An instance of the Model class.
             
         iso3_code: (str) A valid ISO3 country code.        
                    
         bounds:    (tuple) Start and end years for the subset of the PWT data
-                   to use for calibration.
+                   to use for calibration. Default is None which results in all
+                   available data being using in calibration.
+                   
+        sigma0:    (float) User specified initial guess of the true value for 
+                   the elasticity of substitution between capital and effective 
+                   labor. Setting sigma0 = 1.0 will calibrate a model with 
+                   Cobb-Douglas production. If a value of sigma0 != 1.0 is
+                   provided, then sigma (and alpha) will be jointly calibrated 
+                   using a non-linear least squares approach.
+                   
+        alpha0:    (float) User specified initial guess of the true value for
+                   alpha. If sigma0 = 1.0, then alpha will be calibrated using 
+                   data on capital's share. If sigma0 != 1.0, then alpha0 will
+                   be used as an initial guess for the non-linear least squares
+                   routine used to jointly calibrate sigma and alpha.
+                   
+        theta0:    (float) User specified initial guess of the true value for 
+                   the inverse elasticity of intertemporal substitution.
                    
     TODO: Validate the non-linear least squares approach being used to find
-          optimal alpha and sigma.
+          optimal alpha and sigma. This function needs a refactoring!
         
     """
     # modify the country attribute
@@ -1106,18 +1403,15 @@ def calibrate_ces(model, iso3_code, x0, method='Nelder-Mead', tol=1e-9,
     else:
         start = bounds[0]
         end   = bounds[1]
-         
-    ##### estimate the fraction of output saved #####
-    s = model.data.csh_i.loc[start:end].mean()
         
     ##### estimate the labor force growth rate #####
         
     # regress log employed persons on linear time trend
-    trend = pd.Series(model.data.index, index=model.data.index)
+    N     = model.data.index.size
+    trend = pd.Series(np.linspace(0, N - 1, N), index=model.data.index)
     res   = pd.ols(y=np.log(model.data.emp.loc[start:end]), 
                    x=trend.loc[start:end])
     n     = res.beta[0]
-    #L0    = np.exp(res.y_fitted[trend.index[0]])
     L0    = np.exp(res.beta[1])
                            
     ##### estimate the depreciation rate for total capital #####
@@ -1125,59 +1419,124 @@ def calibrate_ces(model, iso3_code, x0, method='Nelder-Mead', tol=1e-9,
     # use average depreciation rate for total capital
     delta = model.dep_rates.delta_k.loc[start+1:end].mean()  
        
-    ##### estimate alpha and sigma using NLLS #####
+    ##### estimate alpha, sigma, and g #####
     
-    def func(params):
-        """Optimize to find alpha and sigma."""
-        alpha = params[0]
-        sigma = params[1]
-        rho   = (sigma - 1) / sigma
-    
-        A = model.data.rtfpna.loc[start:end]
-        Y = model.data.rgdpna.loc[start:end]
-        K = model.data.rkna.loc[start:end]
-        L = model.data.emp.loc[start:end]
-        H = model.data.hc.loc[start:end]
-    
-        # adjust PWT TFP to A for CES production
-        A_tilde = ((K / L) * (((A**rho * (K / L)**(-rho * (1 - alpha)) * 
-                   H**(rho * (1 - alpha))) - alpha) / (1 - alpha))**(1 / rho)) 
-    
-        y = (Y / (A_tilde * L))
-        k = (K / (A_tilde * L))
-    
-        # remove the discontinuity 
-        if abs(rho) < 1e-6:
-            return np.sum((np.log(y) - alpha * alpha * np.log(k))**2)
-        else:
-            return np.sum((np.log(y) - (1 / rho) * np.log(alpha * k**rho + (1 - alpha)))**2)
+    # extract some data series that will be needed
+    A = model.data.rtfpna
+    Y = model.data.rgdpna
+    K = model.data.rkna
+    L = model.data.emp
+    H = model.data.hc
+            
+    if sigma0 == 1.0:
         
-    # solve the non-linear least squares problem        
-    res = optimize.minimize(func, x0, method=method, tol=tol)
-    alpha, sigma = res.x
+        # Cobb-Douglas production
+        sigma = 1.0
+        
+        # with Cobb-Douglas production alpha is simply capital's share
+        alpha = (1 - model.data.labsh.loc[start:end]).mean() 
                 
-    ##### estimate the technology growth rate #####
-          
-    # adjust measure of TFP to remove human capital contribution
-    A   = model.data.rtfpna
-    K   = model.data.rkna
-    L   = model.data.emp
-    H   = model.data.hc
-    rho = (sigma - 1) / sigma
+        # adjust measure of TFP to remove human capital contribution
+        model.data['atfpna'] = A**(1 / (1 - alpha)) * H
+        
+        # regress log TFP on linear time trend
+        res   = pd.ols(y=np.log(model.data.atfpna.loc[start:end]), x=trend)
+        g     = res.beta[0]
+        A0    = np.exp(res.beta[1])
+        
+    else:
+        
+        def objective(params):
+            """Optimize to find alpha and sigma."""
+            alpha = params[0]
+    	    sigma = params[1]
+            gamma = (sigma - 1) / sigma
     
-    model.data['atfpna'] = ((K / L) * (((A**rho * (K / L)**(-rho * (1 - alpha)) * 
-                            H**(rho * (1 - alpha))) - alpha) / (1 - alpha))**(1 / rho)) 
-
-    # regress log TFP on linear time trend
-    res   = pd.ols(y=np.log(model.data.atfpna.loc[start:end]), 
-                   x=trend.loc[start:end])
+            A = model.data.rtfpna.loc[start:end]
+            Y = model.data.rgdpna.loc[start:end]
+            K = model.data.rkna.loc[start:end]
+            L = model.data.emp.loc[start:end]
+            H = model.data.hc.loc[start:end]
+    
+            # adjust measure of TFP to remove human capital contribution 
+            A_tilde = ((K / L) * (((A**gamma * (K / L)**(-gamma * (1 - alpha)) * 
+                       H**(gamma * (1 - alpha))) - alpha) / (1 - alpha))**(1 / gamma)) 
+    
+            y = (Y / (A_tilde * L))
+            k = (K / (A_tilde * L))
+    
+            # remove the discontinuity 
+            if abs(gamma) < 1e-6:
+                rss = np.log(y) - alpha * np.log(k)
+            else:
+                rss = np.log(y) - (1 / gamma) * np.log(alpha * k**gamma + (1 - alpha))
+            return rss
+            
+        # solve the non-linear least squares problem         
+        res = optimize.leastsq(objective, [alpha0, sigma0], full_output=True)
+        
+        # extract parameter estimates
+        alpha, sigma = res[0]
+        
+        # print the total sum of squares
+        tss = np.sum(res[2]['fvec']**2)
+        print 'Total sum of squares:', tss
+        
+        # print info about estimation success/failure
+        if res[4] in [1, 2, 3, 4]:
+            print 'Sucessful estimation of sigma and alpha:', res[3]
+        else:
+            print 'Estimation of sigma and alpha failed!', res[3]      
+            print 'Parameters will be calibrated using your initial condition.'
+             
+        # adjust measure of TFP to remove human capital contribution    
+        gamma = (sigma - 1) / sigma
+        model.data['atfpna'] = ((K / L) * (((A**gamma * (K / L)**(-gamma * (1 - alpha)) * 
+                                H**(gamma * (1 - alpha))) - alpha) / (1 - alpha))**(1 / gamma)) 
+        
+        # regress log TFP on linear time trend
+        res   = pd.ols(y=np.log(model.data.atfpna.loc[start:end]), 
+                       x=trend.loc[start:end])
                    
-    g     = res.beta[0]
-    A0    = np.exp(res.beta[1])
+        g     = res.beta[0]
+        A0    = np.exp(res.beta[1])
     
+    #### estimate the coefficient or relative risk aversion #####
+    
+    # theta is chosen in order to match average K/Y ratio
+    capital_output_ratio = (model.data.rkna.loc[start:end] / 
+                            model.data.rgdpna.loc[start:end])
+    target1 = capital_output_ratio.mean()
+        
+    def objective2(theta):
+        """Defines model predicted capital-output ratio on BGP."""
+        # define a dictionary of temporary params
+        tmp_params = {'alpha':alpha, 'delta':delta, 'rho':rho, 'n':n, 'g':g,
+                      'theta':theta, 'sigma':sigma}
+                      
+        # extract tmp bgp values
+        tmp_k_star = model.steady_state.functions['k_star'](tmp_params)
+        tmp_y_star = model.output(0, tmp_k_star, tmp_params)
+
+        # compare model prediction to target
+        out = (tmp_k_star / tmp_y_star) - target1
+            
+        return out
+    
+    res   = optimize.root(objective2, theta0, method='hybr')
+    
+    # extract the parameter results
+    theta = res.x[0]
+    
+    if res.success == True:
+        print 'Calibration of theta successful!', res.message
+    else:
+        print 'Calibration of theta failed:', res.message
+        print 'Parameter will be calibrated using your initial condition.'
+         
     # create a dictionary of model parameters
-    params = {'s':s, 'alpha':alpha, 'sigma':sigma, 'delta':delta, 'n':n, 
-              'L0':L0, 'g':g, 'A0':A0}
+    params = {'alpha':alpha, 'sigma':sigma, 'delta':delta, 'theta':theta, 
+              'rho':rho, 'n':n, 'L0':L0, 'g':g, 'A0':A0}
               
     # update the model's parameters
     model.update_model_parameters(params)

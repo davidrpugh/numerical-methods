@@ -99,25 +99,6 @@ class Model(solvers.IVP):
         
         # initialize an empty SteadyState object
         self.steady_state = steady_states.SteadyState(self)    
-     
-    def evaluate_jacobian(self, vec):
-        """
-        Wraps the model's Jacobian so that it can be evaluated at a point in
-        phase space.
-        
-        Arguments:
-            
-            vec: (array-like) Array of values for capital and consumption 
-                 (per worker/effective worker) k, c at which to evaluate the
-                 Jacobian.
-                 
-        Returns:
-            
-            evaluated_jac: (float) Jacobian evaluated at the point vec.
-                 
-        """ 
-        evaluated_jac = self.jac(0, vec, self.params)
-        return evaluated_jac
                             
     def update_model_parameters(self, new_params):
         """Updates the model's parameter dictionary."""
@@ -184,32 +165,37 @@ class Model(solvers.IVP):
                  head_width=0.05 * c_star, head_length=0.05 * k_star)
                      
     def plot_phase_diagram(self, gridmax, N=1000, arrows=False, param=None,  
-                           shock=None, reset=True, cmap='winter', mu=0.1):
+                           shock=None, reset=True, plot_traj=False, 
+                           cmap='winter', mu=0.1):
         """
         Generates phase diagram for the Ramsey model.
         
         Arguments:
             
-            gridmax: (float) Maximum value for capital per effective person.
+            gridmax:   (float) Maximum value for capital per effective person.
             
-            N:       (int, optional) Number of points to plot. Default is 1000.
+            N:         (int) Number of points to plot. Default is 1000.
             
-            arrows:  (boolean) If True, plots directional arrows indicating out
-                     of steady state dynamics. Default is False.
+            arrows:    (boolean) If True, plots directional arrows indicating
+                       out of steady state dynamics. Default is False.
             
-            param:   (string) Model parameter to shock (optional).
+            param:     (string) Model parameter to shock (optional).
             
-            shock:   (float) Multiplicative shock to the parameter. Values < 1 
-                     correspond to a reducing the current value of a parameter; 
-                     values > 1 correspond to increasing the current value of 
-                     the parameter (optional).
+            shock:     (float) Multiplicative shock to the parameter. Values < 1 
+                       correspond to a reducing the current value of a parameter; 
+                       values > 1 correspond to increasing the current value of 
+                       the parameter (optional).
             
-            reset:   (boolean) Whether or not to reset the original parameters
-                     to their pre-shock values. Default is True.
+            reset:     (boolean) Whether or not to reset the original parameters
+                       to their pre-shock values. Default is True.
             
-            cmap:    (str) A valid matplotlib colormap. Default is 'winter'.
+            plot_traj: (boolean) Whether or not you wish to plot a trajectory of
+                       the economy in order to show transition dynamics 
+                       following a shock to a parameter.
+                       
+            cmap:      (str) A valid matplotlib colormap. Default is 'winter'.
             
-            mu:      (float) Determines spread between colors...
+            mu:        (float) Determines spread between colors...
         
         Returns: A list containing...
         
@@ -235,6 +221,7 @@ class Model(solvers.IVP):
         # grid of points for plotting
         grid   = np.linspace(0, gridmax, N)
         
+        # demarcate model steady state
         k_locus   = ax.plot(grid, self.__get_k_locus(0, grid, self.params), '-', 
                             color=colors[0], label=r'$\dot{k}=0$')[0]
         
@@ -267,8 +254,9 @@ class Model(solvers.IVP):
         # handles parameter shocks   
         if param != None and shock !=None:
             
-            # copy the original params
+            # copy the original params and steady state value
             orig_params = self.params.copy()
+            orig_k_star = k_star
             
             # shock the parameter
             self.params[param] = shock * self.params[param]
@@ -354,6 +342,11 @@ class Model(solvers.IVP):
             else:
                 raise ValueError
             
+            # plot a trajectory in phase space showing transition dynamics
+            if plot_traj == True:
+                traj = self.solve_reverse_shooting(orig_k_star)
+                self.plot_trajectory(traj, color='r')
+                
             # add arrows to indicate out of steady-state dynamics?
             if arrows == True:
                 self.__add_arrows(ax, mu=0.25)
@@ -376,7 +369,7 @@ class Model(solvers.IVP):
                 
             return [ax, k_locus, c_locus, ss_marker]   
         
-    def plot_trajectory(self, traj, color='b', ax=None, kind='phase_space', 
+    def plot_trajectory(self, traj, color='b', ax=None, phase_space=True, 
                         **kwargs):
         """
         Plots the time path of the economy.
@@ -402,14 +395,11 @@ class Model(solvers.IVP):
         if ax == None:
             ax = plt.subplot(111)
                 
-        if kind == 'phase_space':
+        if phase_space == True:
             ax.plot(traj[:,1], traj[:,2], color=color, **kwargs)
             
-        elif kind == 'time_series':
-            ax.plot(traj[:,0], traj[:,1], color=color, **kwargs)
-        
         else:
-            raise ValueError
+            ax.plot(traj[:,0], traj[:,1], color=color, **kwargs)
     
     def get_impulse_response(self, method, param, shock, T=100, 
                              kind='efficiency_units', reset=True):
@@ -538,10 +528,13 @@ class Model(solvers.IVP):
             factor = np.ones(irf[:,0].size)
         
         else:
-            raise ValueError
+            raise ValueError, "Invalid 'kind' of impulse response functions."
         
         # shift the time index forward 2013 periods
         irf[:,0] += 2013
+        
+        # compute the irf for c 
+        irf[:,2] = (factor * irf[:,2])
         
         # compute the irf for y
         irf_y = self.output(irf[:,0], irf[:,1], self.params)
@@ -576,21 +569,26 @@ class Model(solvers.IVP):
         
         Arguments:
             
-            variables:
+            variables: (list) List of variables whose impulse response functions
+                       you wish to plot. Alternatively, you can plot irfs for 
+                       all variables by setting variables = 'all'.
                 
-            method:
+            method:    (str) Method used to compute the irfs. Must be one of 
+                       'linearization', 'forward_shooting', 'reverse_shooting'
+                       or 'multiple_shooting.'
                     
-            param: (string) Model parameter.
+            param:     (string) Model parameter.
             
-            shock: (float) Shock to the parameter. Values < 1 correspond to a
-                   reducing the current value of the parameter; values > 1
-                   correspond to increasing the current value of the parameter.
+            shock:     (float) Shock to the parameter. Values < 1 correspond to 
+                       a reduction in the current value of the parameter; 
+                       values > 1 correspond to an increase in the current value
+                       of the parameter.
                    
-            T:     (float) Length of the impulse response. Default is 40.
+            T:         (float) Length of the impulse response. Default is 40.
             
-            kind:  (str) Whether you want impulse response functions in 'levels',
-                   'per_capita', or 'efficiency_units'. Default is for irfs to
-                   be in 'efficiency_units'.
+            kind:      (str) Whether you want impulse response functions in 
+                       'levels', 'per_capita', or 'efficiency_units'. Default is
+                       for irfs to be in 'efficiency_units'.
                    
             log:   (boolean) Whether or not to have logarithmic scales on the
                    vertical axes. Default is False.
@@ -604,8 +602,10 @@ class Model(solvers.IVP):
         # first need to generate and irf
         irf = self.get_impulse_response(method, param, shock, T, kind, reset)
         
+        
         # create mapping from variables to column indices
-        indices = {'k':1, 'c':2, 'y':3, 'r':4, 'w':5}
+        irf_dict = {'k':irf[:,[0,1]], 'c':irf[:,[0,2]], 'y':irf[:,[0,3]], 
+                    'r':irf[:,[0,4]], 'w':irf[:,[0,5]]}
         
         # necessary for pretty latex printing
         if param in ['alpha', 'delta', 'sigma', 'theta', 'rho']:
@@ -620,57 +620,68 @@ class Model(solvers.IVP):
             tit = 'Impulse response following NO shock to $%s$' % param
 
         if variables == 'all':
+            variables = irf_dict.keys()
             
-            fig, axes = plt.subplots(irf.shape[1], 1, sharex=True, **fig_kw)
+        fig, axes = plt.subplots(irf.shape[1] - 1, 1, **fig_kw)
             
-            for var, index in indices.iteritems(): 
+        for i, var in enumerate(variables): 
                 
-                self.plot_trajectory(irf[:,[0, index]], color, axes[index], 'time_series')
+            # extract the time series
+            traj = irf_dict[var]
                 
-                if kind == 'efficiency_units':
-                    axes[index].set_ylabel('$%s(t)$' %var, rotation='horizontal', fontsize=15, 
-                       family='serif')
-                           
-                elif kind == 'per_capita':
-                    
-                    if var in ['k', 'y', 'c']:
-                        axes[index].set_ylabel('$\frac{%s}{L}(t)$' %var.upper(), 
-                                               rotation='horizontal', fontsize=15, 
-                                               family='serif')
-                    elif var == 'w':
-                        axes[index].set_ylabel('$%s(t)$' %var.upper(), 
-                                               rotation='horizontal', fontsize=15, 
-                                               family='serif')
-                    elif var == 'r':
-                        axes[index].set_ylabel('$%s(t)$' %var, 
-                                               rotation='horizontal', fontsize=15, 
-                                               family='serif')
+            # plot the irf
+            self.plot_trajectory(traj, color, axes[i], phase_space=False)
+                
+            # adjust y-axis limits
+            axes[i].set_ylim(0.95 * traj[:,1].min(), 1.05 * traj[:,1].max())
+                
+            # y axis labels depend on kind of irfs
+            if kind == 'per_capita':
+                  
+                if var in ['k', 'y', 'c']:
+                    axes[i].plot(traj[:,0], traj[0,1] * np.exp(self.params['g'] * traj[:,0]), 'k--')
+                    axes[i].set_ylabel(r'$\frac{%s}{L}(t)$' %var.upper(), 
+                                       rotation='horizontal', fontsize=15, 
+                                       family='serif')
+                elif var == 'w':
+                    axes[i].plot(traj[:,0], traj[0,1] * np.exp(self.params['g'] * traj[:,0]), 'k--')
+                    axes[i].set_ylabel('$%s(t)$' %var.upper(), 
+                                       rotation='horizontal', fontsize=15, 
+                                       family='serif')
+                elif var == 'r':
+                    axes[i].set_ylabel('$%s(t)$' %var, 
+                                       rotation='horizontal', fontsize=15, 
+                                       family='serif')
                                                
-                elif kind == 'levels':
+            elif kind == 'levels':
                     
-                    if var in ['k', 'y', 'c']:
-                        axes[index].set_ylabel('$%s(t)$' %var.upper(), 
-                                               rotation='horizontal', fontsize=15, 
-                                               family='serif')
-                    elif var == 'w':
-                        axes[index].set_ylabel('$%sL(t)$' %var.upper(), 
-                                               rotation='horizontal', fontsize=15, 
-                                               family='serif')
-                    elif var == 'r':
-                        axes[index].set_ylabel('$%s(t)$' %var, 
-                                               rotation='horizontal', fontsize=15, 
-                                               family='serif')
-             
-                axes[index].yaxis.set_label_coords(-0.055, 0.45)
+                if var in ['k', 'y', 'c']:
+                    axes[i].set_ylabel('$%s(t)$' %var.upper(), 
+                                       rotation='horizontal', fontsize=15, 
+                                       family='serif')
+                elif var == 'w':
+                    axes[i].set_ylabel('$%sL(t)$' %var.upper(), 
+                                       rotation='horizontal', fontsize=15, 
+                                       family='serif')
+                elif var == 'r':
+                    axes[i].set_ylabel('$%s(t)$' %var, 
+                                       rotation='horizontal', fontsize=15, 
+                                       family='serif')
+                                               
+            else:
+                axes[i].set_ylabel('$%s(t)$' %var, rotation='horizontal', 
+                                   fontsize=15, family='serif')
+                                       
+            # adjust location of y-axis label
+            axes[i].yaxis.set_label_coords(-0.1, 0.45)
+    
+            # log the y-scale for the plots
+            if log == True:
+                axes[i].set_yscale('log')
+                    
+        axes[0].set_title(tit, family='serif', fontsize=20)
+        axes[-1].set_xlabel('Year, $t$,', fontsize=15, family='serif')
         
-                # log the y-scale for the plots
-                if log == True:
-                    axes[index].set_yscale('log')
-                    
-            axes[0].set_title(tit, family='serif', fontsize=20)
-            axes[-1].set_xlabel('Time, $t$,', fontsize=15, family='serif')
-            #ax3.yaxis.set_label_coords(-0.055, 0.45)
-            
         return [fig, axes]
     
     def solve_linearization(self, k0, ti):

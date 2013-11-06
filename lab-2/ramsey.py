@@ -104,7 +104,17 @@ class Model(solvers.IVP):
         """Updates the model's parameter dictionary."""
         self.args = (new_params.copy(),) + self.args[1:]
         self.params = self.args[0]            
-            
+    
+    def get_capitals_share(self, k):
+        """Computes capital's share of income eps_k(k)."""
+        capitals_income = k * self.mpk(0, k, self.params)
+        total_output    = self.output(0, k, self.params)
+        
+        # definition of capital's share
+        eps_k =  capitals_income / total_output 
+    
+        return eps_k
+                
     def __get_k_locus(self, t, k_grid, params):
         """Values of c consistent with steady state k."""
         # for each k, want value of c that makes this zero
@@ -758,7 +768,7 @@ class Model(solvers.IVP):
         return linearized_traj
         
     def solve_forward_shooting(self, k0, h=1e-1, tol=1.5e-4, mesg=False, 
-                               integrator='dopri5', **kwargs):
+                               integrator='lsoda', **kwargs):
         """
         Computes the full, non-linear saddle path for the continuous time 
         version of the Ramsey model using the 'forward shooting' algorithm (see 
@@ -905,7 +915,7 @@ class Model(solvers.IVP):
                 
         return solution
         
-    def solve_reverse_shooting(self, k0, h=1e-3, eps=1e-5, integrator='dopri5', 
+    def solve_reverse_shooting(self, k0, h=1e-3, eps=1e-5, integrator='lsoda', 
                                step=False, relax=False, **kwargs):
         """
         Computes the full, non-linear saddle path (i.e., the consumption policy

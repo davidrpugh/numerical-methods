@@ -126,10 +126,19 @@ model.steady_state.set_functions(steady_state_funcs)
 growth.calibrate_cobb_douglas(model, 'GBR')
 
 # create a new figure
-fig = plt.figure(figsize=(12,8))
+fig_kwargs = {'figsize':(12,8)}
 
-# irf for shock to n
-model.plot_impulse_response('n', 0.5, 100, 'per_capita', True, True)
+# irf for shock to alpha
+model.plot_impulse_response(variables='all',         
+                            param='n',               
+                            shock=0.5,               
+                            T=100,                   
+                            color='b',               
+                            year=2013,               
+                            kind='per_capita', 
+                            log=True,               
+                            reset=True,              
+                            **fig_kwargs)
 
 # display the figure
 plt.show()

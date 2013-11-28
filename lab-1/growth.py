@@ -720,8 +720,8 @@ def calibrate_cobb_douglas(model, iso3_code, bounds=None):
     # compute new steady state values
     model.steady_state.set_values()
 
-def calibrate_ces(model, iso3_code, x0, base=2005, method='BFGS', tol=1e-9, 
-                  bounds=None):
+def calibrate_ces(model, iso3_code, x0, base=2005, bounds=None, method='COBYLA', 
+                  tol=1e-9, **kwargs):
     """
     Calibrates a Solow model with constant elasticity of substition (CES)
     production using data from the Penn World Tables (PWT).
@@ -735,25 +735,21 @@ def calibrate_ces(model, iso3_code, x0, base=2005, method='BFGS', tol=1e-9,
         x0:        (array-like) Initial guess of optimal alpha and sigma.
         
         method:    (str) Method used to estimate alpha and sigma via non-linear 
-                   least-squares. Default is 'BFGS'.
+                   least-squares. Default is 'COBYLA'.
                    
         tol:       (float) Convergence tolerance for non-linear least squares 
                    problem. Default is 1e-9.
                    
-        bounds:    (tuple) Start and end years for the subset of the PWT data
-                   to use for calibration.
+        kwargs:    (dict) Dictionary of additional keyword options to pass to the 
+                   non-linear optimization routine.
     
     Returns: A list containing...
     
-        res1: (object) OLS regression result used in estimating population 
-                       growth rate.
-        res2: (object) NNLS estimation result used to estimate alpha and sigma.
-        res3: (object) OLS regression result used in estimating the growth rate 
-                       of productivity.
-        
-    TODO: Validate the non-linear least squares approach being used to find
-          optimal alpha and sigma.
-        
+        res1: (object) OLS regression result used in estimating population growth rate.
+        res2: (object) OLS regression result used in estimating the growth rate of
+                       productivity.
+        res3: (object) NNLS estimation result used to estimate alpha and sigma.
+                
     """
     # modify the country attribute
     model.iso3_code = iso3_code
@@ -777,6 +773,10 @@ def calibrate_ces(model, iso3_code, x0, base=2005, method='BFGS', tol=1e-9,
     I_share = model.data.csh_i.loc[start:end]
     K_dep   = model.dep_rates.delta_k.loc[start+1:end]
     
+    # compute adjusted measure of TFP 
+    model.data['atfpna'] = (model.data.rtfpna**(1 / model.data.labsh) * 
+                            model.data.hc)
+    
     ##### estimate the fraction of output saved #####
     
     # use average investment share of gdp
@@ -790,7 +790,15 @@ def calibrate_ces(model, iso3_code, x0, base=2005, method='BFGS', tol=1e-9,
     res1  = pd.ols(y=np.log(L), x=trend.loc[start:end])
     n     = res1.beta[0]
     L0    = np.exp(res1.beta[1])
-                           
+    
+    ##### estimate the technology growth rate #####
+        
+    # regress log TFP on linear time trend
+    A    = model.data.atfpna.loc[start:end]
+    res2 = pd.ols(y=np.log(A), x=trend.loc[start:end])
+    g    = res2.beta[0]
+    A0   = np.exp(res2.beta[1])
+    
     ##### estimate the depreciation rate for total capital #####
         
     # use average depreciation rate for total capital
@@ -798,7 +806,7 @@ def calibrate_ces(model, iso3_code, x0, base=2005, method='BFGS', tol=1e-9,
        
     ##### estimate alpha and sigma using NLLS #####
     
-    def objective(ces_params, model, base):
+    def objective(ces_params):
         """
         Choose parameters of ces producting function, alpha and sigma, 
         to minimize this function.
@@ -807,9 +815,6 @@ def calibrate_ces(model, iso3_code, x0, base=2005, method='BFGS', tol=1e-9,
         # extract parameters
         alpha, sigma = ces_params
         rho = (sigma - 1) / sigma
-        
-        # get adjusted productivity (depends on current parameters!)
-        A = compute_adjusted_productivity(model, ces_params, base)
         
         # define the objective function
         y = (Y / (A * L))
@@ -825,47 +830,36 @@ def calibrate_ces(model, iso3_code, x0, base=2005, method='BFGS', tol=1e-9,
             
         return tss
     
-    def constraint1(ces_params, model, base):
+    def constraint1(ces_params):
         """Insures that steady-state capital per effective worker is finite."""
         # extract parameters
         alpha, sigma = ces_params
         rho = (sigma - 1) / sigma
         
-        # unfortunately, g needs to be estimated for given alpha, sigma
-        tmp_A    = compute_adjusted_productivity(model, ces_params, base)
-        tmp_res  = pd.ols(y=np.log(tmp_A.loc[start:end]), x=trend.loc[start:end])                   
-        g        = tmp_res.beta[0]
+        return min(((n + g + delta) / s)**rho, 1) - alpha 
         
-        return (n + g + delta)**rho - alpha * s**rho
-        
-    def constraint2(ces_params, model, base):
-        """Non-negativiely constraint on elasticity on sigma."""
+    def constraint2(ces_params):
+        """Non-negativiely constraint on sigma."""
         # extract parameters
-        alpha, sigma = ces_params
-        
-        return sigma
+        alpha, sigma = ces_params  
+        return sigma 
     
-    constraints = [{'type':'ineq', 'fun':constraint1, 'args':(model, base)},
-                   {'type':'ineq', 'fun':constraint2, 'args':(model, base)}]
+    def constraint3(ces_params):
+        """Non-negativiely constraint on alpha."""
+        # extract parameters
+        alpha, sigma = ces_params        
+        return alpha
     
-    bounds      = [(0, 1), (0, None)]
+    # create a dictionary of constraints
+    constraints = [{'type':'ineq', 'fun':constraint1},
+                   {'type':'ineq', 'fun':constraint2},
+                   {'type':'ineq', 'fun':constraint3}]
     
     # solve the non-linear least squares problem        
-    res2 = optimize.minimize(objective, x0, args=(model, base), method=method, 
-                             tol=tol, bounds=bounds, options={'disp':True})
-    alpha, sigma = res2.x
-    
-    ##### estimate the technology growth rate #####
-          
-    # store the adjusted measure of TFP for optimal parameters   
-    model.data['atfpna'] = compute_adjusted_productivity(model, res2.x, base)
-
-    # regress log TFP on linear time trend
-    res3  = pd.ols(y=np.log(model.data.atfpna.loc[start:end]), 
-                   x=trend.loc[start:end])                   
-    g     = res3.beta[0]
-    A0    = np.exp(res3.beta[1])
-    
+    res3 = optimize.minimize(objective, x0, method=method, tol=tol,
+                             constraints=constraints, **kwargs)
+    alpha, sigma = res3.x
+        
     # create a dictionary of model parameters
     params = {'s':s, 'alpha':alpha, 'sigma':sigma, 'delta':delta, 'n':n, 
               'L0':L0, 'g':g, 'A0':A0}
@@ -877,39 +871,3 @@ def calibrate_ces(model, iso3_code, x0, base=2005, method='BFGS', tol=1e-9,
     model.steady_state.set_values()
 
     return [res1, res2, res3]
-
-def compute_adjusted_productivity(model, ces_params, base=2005):
-    """
-    Computes adjusted productivity by using a Tornquist quantity index to 
-    approximate the CES production function.
-    
-    """
-    # compute capital's share of income and the Tornquist exponent
-    capitals_share = ces_capitals_share(model, ces_params)
-    exponent = 0.5 * capitals_share + capitals_share.loc[base] # but this also depends on A!
-    
-    # extract model data
-    K = model.data.rkna
-    L = model.data.emp
-    Y = model.data.rgdpna
-    
-    # back out implied productivity series
-    denominator = (K / K.loc[base])**exponent * (L / L.loc[base])**(1 - exponent)
-    A = ((Y / Y.loc[base]) / denominator)**(1 / (1 - exponent))
-    
-    return A    
- 
-def ces_capitals_share(model, ces_params):
-    """Capital's share of output/income for CES production function."""
-    # extract parameters
-    alpha, sigma = ces_params
-    rho = (sigma - 1) / sigma
-    
-    # extract model data
-    K = model.data.rkna
-    L = model.data.emp
-    
-    # compute capital's share of income
-    epsilon_k = (alpha * K**rho / (alpha * K**rho + (1 - alpha) * L**rho))
-    
-    return epsilon_k

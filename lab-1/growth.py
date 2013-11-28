@@ -842,12 +842,12 @@ def calibrate_ces(model, iso3_code, x0, base=2005, method='BFGS', tol=1e-9,
         """Non-negativiely constraint on elasticity on sigma."""
         # extract parameters
         alpha, sigma = ces_params
-        rho = (sigma - 1) / sigma
         
         return sigma
     
     constraints = [{'type':'ineq', 'fun':constraint1, 'args':(model, base)},
                    {'type':'ineq', 'fun':constraint2, 'args':(model, base)}]
+    
     bounds      = [(0, 1), (0, None)]
     
     # solve the non-linear least squares problem        

@@ -202,7 +202,7 @@ class SolowModel(solvers.IVP):
         else:
             raise ValueError
             
-        # start with 2013 periods of steady state values
+        # start with N periods of steady state values
         padding_k = np.repeat(k0, N)
         padding   = np.hstack((time_padding[:,np.newaxis], 
                               (factor * padding_k)[:,np.newaxis]))
@@ -695,8 +695,9 @@ def calibrate_cobb_douglas(model, iso3_code, bounds=None):
     
     ##### estimate the technology growth rate #####
         
-    # adjust measure of TFP to remove human capital contribution
-    model.data['atfpna'] = model.data.rtfpna**(1 / (1 - alpha)) * model.data.hc
+    # adjust measure of TFP 
+    model.data['atfpna'] = (model.data.rtfpna**(1 / model.data.labsh) * 
+                            model.data.hc)
         
     # regress log TFP on linear time trend
     res   = pd.ols(y=np.log(model.data.atfpna.loc[start:end]), 
@@ -707,11 +708,11 @@ def calibrate_cobb_douglas(model, iso3_code, bounds=None):
     ##### estimate the depreciation rate for total capital #####
         
     # use average depreciation rate for total capital
-    delta = model.dep_rates.delta_k.mean()   
+    delta = model.dep_rates.delta_k.loc[start+1:end].mean()   
          
     # create a dictionary of model parameters
     params = {'s':s, 'alpha':alpha, 'delta':delta, 'n':n, 'L0':L0, 'g':g,
-              'A0':A0}
+              'A0':A0, 'sigma':1.0}
         
     # update the model's parameters
     model.update_model_parameters(params)
@@ -719,7 +720,7 @@ def calibrate_cobb_douglas(model, iso3_code, bounds=None):
     # compute new steady state values
     model.steady_state.set_values()
 
-def calibrate_ces(model, iso3_code, x0, method='Nelder-Mead', tol=1e-9, 
+def calibrate_ces(model, iso3_code, x0, base=2005, method='BFGS', tol=1e-9, 
                   bounds=None):
     """
     Calibrates a Solow model with constant elasticity of substition (CES)
@@ -731,9 +732,25 @@ def calibrate_ces(model, iso3_code, x0, method='Nelder-Mead', tol=1e-9,
             
         iso3_code: (str) A valid ISO3 country code.        
                    
+        x0:        (array-like) Initial guess of optimal alpha and sigma.
+        
+        method:    (str) Method used to estimate alpha and sigma via non-linear 
+                   least-squares. Default is 'BFGS'.
+                   
+        tol:       (float) Convergence tolerance for non-linear least squares 
+                   problem. Default is 1e-9.
+                   
         bounds:    (tuple) Start and end years for the subset of the PWT data
                    to use for calibration.
-                   
+    
+    Returns: A list containing...
+    
+        res1: (object) OLS regression result used in estimating population 
+                       growth rate.
+        res2: (object) NNLS estimation result used to estimate alpha and sigma.
+        res3: (object) OLS regression result used in estimating the growth rate 
+                       of productivity.
+        
     TODO: Validate the non-linear least squares approach being used to find
           optimal alpha and sigma.
         
@@ -745,82 +762,109 @@ def calibrate_ces(model, iso3_code, x0, method='Nelder-Mead', tol=1e-9,
     model.data      = model.pwt_data.minor_xs(iso3_code)
     model.dep_rates = model.pwt_dep_rates.minor_xs(iso3_code)
     
-    # set bounds
+    # set bounds for calibration data
     if bounds == None:
         start = model.data.index[0]
         end   = model.data.index[-1]
     else:
         start = bounds[0]
         end   = bounds[1]
-         
+    
+    # extract model data used in calibration
+    K       = model.data.rkna.loc[start:end]
+    L       = model.data.emp.loc[start:end]
+    Y       = model.data.rgdpna.loc[start:end]
+    I_share = model.data.csh_i.loc[start:end]
+    K_dep   = model.dep_rates.delta_k.loc[start+1:end]
+    
     ##### estimate the fraction of output saved #####
-    s = model.data.csh_i.loc[start:end].mean()
+    
+    # use average investment share of gdp
+    s = I_share.mean()
         
     ##### estimate the labor force growth rate #####
         
     # regress log employed persons on linear time trend
-    trend = pd.Series(model.data.index, index=model.data.index)
-    res   = pd.ols(y=np.log(model.data.emp.loc[start:end]), 
-                   x=trend.loc[start:end])
-    n     = res.beta[0]
-    #L0    = np.exp(res.y_fitted[trend.index[0]])
-    L0    = np.exp(res.beta[1])
+    N     = model.data.index.size
+    trend = pd.Series(np.linspace(0, N - 1, N), index=model.data.index)
+    res1  = pd.ols(y=np.log(L), x=trend.loc[start:end])
+    n     = res1.beta[0]
+    L0    = np.exp(res1.beta[1])
                            
     ##### estimate the depreciation rate for total capital #####
         
     # use average depreciation rate for total capital
-    delta = model.dep_rates.delta_k.loc[start+1:end].mean()  
+    delta = K_dep.mean()  
        
     ##### estimate alpha and sigma using NLLS #####
     
-    def func(params):
-        """Optimize to find alpha and sigma."""
-        alpha = params[0]
-        sigma = params[1]
-        rho   = (sigma - 1) / sigma
-    
-        A = model.data.rtfpna.loc[start:end]
-        Y = model.data.rgdpna.loc[start:end]
-        K = model.data.rkna.loc[start:end]
-        L = model.data.emp.loc[start:end]
-        H = model.data.hc.loc[start:end]
-    
-        # adjust PWT TFP to A for CES production
-        A_tilde = ((K / L) * (((A**rho * (K / L)**(-rho * (1 - alpha)) * 
-                   H**(rho * (1 - alpha))) - alpha) / (1 - alpha))**(1 / rho)) 
-    
-        y = (Y / (A_tilde * L))
-        k = (K / (A_tilde * L))
-    
-        # remove the discontinuity 
-        if abs(rho) < 1e-6:
-            return np.sum((np.log(y) - alpha * np.log(k))**2)
-        else:
-            return np.sum((np.log(y) - (1 / rho) * np.log(alpha * k**rho + (1 - alpha)))**2)
+    def objective(ces_params, model, base):
+        """
+        Choose parameters of ces producting function, alpha and sigma, 
+        to minimize this function.
         
+        """
+        # extract parameters
+        alpha, sigma = ces_params
+        rho = (sigma - 1) / sigma
+        
+        # get adjusted productivity (depends on current parameters!)
+        A = compute_adjusted_productivity(model, ces_params, base)
+        
+        # define the objective function
+        y = (Y / (A * L))
+        k = (K / (A * L))
+    
+        if abs(rho) < 1e-6:
+            residual = np.log(y) - alpha * np.log(k)
+            tss = np.sum(residual**2)
+            
+        else:
+            residual = np.log(y) - (1 / rho) * np.log(alpha * k**rho + (1 - alpha))
+            tss = np.sum(residual**2)
+            
+        return tss
+    
+    def constraint1(ces_params, model, base):
+        """Insures that steady-state capital per effective worker is finite."""
+        # extract parameters
+        alpha, sigma = ces_params
+        rho = (sigma - 1) / sigma
+        
+        # unfortunately, g needs to be estimated for given alpha, sigma
+        tmp_A    = compute_adjusted_productivity(model, ces_params, base)
+        tmp_res  = pd.ols(y=np.log(tmp_A.loc[start:end]), x=trend.loc[start:end])                   
+        g        = tmp_res.beta[0]
+        
+        return (n + g + delta)**rho - alpha * s**rho
+        
+    def constraint2(ces_params, model, base):
+        """Non-negativiely constraint on elasticity on sigma."""
+        # extract parameters
+        alpha, sigma = ces_params
+        rho = (sigma - 1) / sigma
+        
+        return sigma
+    
+    constraints = [{'type':'ineq', 'fun':constraint1, 'args':(model, base)},
+                   {'type':'ineq', 'fun':constraint2, 'args':(model, base)}]
+    bounds      = [(0, 1), (0, None)]
+    
     # solve the non-linear least squares problem        
-    res = optimize.minimize(func, x0, method=method, tol=tol)
-    alpha, sigma = res.x
-                
+    res2 = optimize.minimize(objective, x0, args=(model, base), method=method, 
+                             tol=tol, bounds=bounds, options={'disp':True})
+    alpha, sigma = res2.x
+    
     ##### estimate the technology growth rate #####
           
-    # adjust measure of TFP to remove human capital contribution
-    A   = model.data.rtfpna
-    K   = model.data.rkna
-    L   = model.data.emp
-    H   = model.data.hc
-    rho = (sigma - 1) / sigma
-    
-    model.data['atfpna'] = ((K / L) * (((A**rho * (K / L)**(-rho * (1 - alpha)) * 
-                            H**(rho * (1 - alpha))) - alpha) / (1 - alpha))**(1 / rho)) 
+    # store the adjusted measure of TFP for optimal parameters   
+    model.data['atfpna'] = compute_adjusted_productivity(model, res2.x, base)
 
     # regress log TFP on linear time trend
-    res   = pd.ols(y=np.log(model.data.atfpna.loc[start:end]), 
-                   x=trend.loc[start:end])
-                   
-    g     = res.beta[0]
-    #A0    = np.exp(res.y_fitted[trend.index[0]])
-    A0    = np.exp(res.beta[1])
+    res3  = pd.ols(y=np.log(model.data.atfpna.loc[start:end]), 
+                   x=trend.loc[start:end])                   
+    g     = res3.beta[0]
+    A0    = np.exp(res3.beta[1])
     
     # create a dictionary of model parameters
     params = {'s':s, 'alpha':alpha, 'sigma':sigma, 'delta':delta, 'n':n, 
@@ -832,190 +876,40 @@ def calibrate_ces(model, iso3_code, x0, method='Nelder-Mead', tol=1e-9,
     # compute new steady state values
     model.steady_state.set_values()
 
-def calibrate_ces(model, iso3_code, bounds=None, sigma0=1.0, alpha0=None, 
-                  theta0=2.5, rho=0.04):
-    """
-    Calibrates an optimal growth model with constant elasticity of substition 
-    (CES) production using data from the Penn World Tables (PWT).
+    return [res1, res2, res3]
 
-    Arguments:
-        
-        model:     (object) An instance of the Model class.
-            
-        iso3_code: (str) A valid ISO3 country code.        
-                   
-        bounds:    (tuple) Start and end years for the subset of the PWT data
-                   to use for calibration. Default is None which results in all
-                   available data being using in calibration.
-                   
-        sigma0:    (float) User specified initial guess of the true value for 
-                   the elasticity of substitution between capital and effective 
-                   labor. Setting sigma0 = 1.0 will calibrate a model with 
-                   Cobb-Douglas production. If a value of sigma0 != 1.0 is
-                   provided, then sigma (and alpha) will be jointly calibrated 
-                   using a non-linear least squares approach.
-                   
-        alpha0:    (float) User specified initial guess of the true value for
-                   alpha. If sigma0 = 1.0, then alpha will be calibrated using 
-                   data on capital's share. If sigma0 != 1.0, then alpha0 will
-                   be used as an initial guess for the non-linear least squares
-                   routine used to jointly calibrate sigma and alpha.
-                   
-    TODO: Validate the non-linear least squares approach being used to find
-          optimal alpha and sigma. This function needs a refactoring!
-        
+def compute_adjusted_productivity(model, ces_params, base=2005):
     """
-    # modify the country attribute
-    model.iso3_code = iso3_code
-        
-    # get the PWT data for the iso_code
-    model.data      = model.pwt_data.minor_xs(iso3_code)
-    model.dep_rates = model.pwt_dep_rates.minor_xs(iso3_code)
+    Computes adjusted productivity by using a Tornquist quantity index to 
+    approximate the CES production function.
     
-    # set bounds
-    if bounds == None:
-        start = model.data.index[0]
-        end   = model.data.index[-1]
-    else:
-        start = bounds[0]
-        end   = bounds[1]
-        
-    ##### estimate the labor force growth rate #####
-        
-    # regress log employed persons on linear time trend
-    N     = model.data.index.size
-    trend = pd.Series(np.linspace(0, N - 1, N), index=model.data.index)
-    res   = pd.ols(y=np.log(model.data.emp.loc[start:end]), 
-                   x=trend.loc[start:end])
-    n     = res.beta[0]
-    L0    = np.exp(res.beta[1])
-                           
-    ##### estimate the depreciation rate for total capital #####
-        
-    # use average depreciation rate for total capital
-    delta = model.dep_rates.delta_k.loc[start+1:end].mean()  
-       
-    ##### estimate alpha, sigma, and g #####
+    """
+    # compute capital's share of income and the Tornquist exponent
+    capitals_share = ces_capitals_share(model, ces_params)
+    exponent = 0.5 * capitals_share + capitals_share.loc[base] # but this also depends on A!
     
-    # extract some data series that will be needed
-    A = model.data.rtfpna
-    Y = model.data.rgdpna
+    # extract model data
     K = model.data.rkna
     L = model.data.emp
-    H = model.data.hc
-            
-    if sigma0 == 1.0:
-        
-        # Cobb-Douglas production
-        sigma = 1.0
-        
-        # with Cobb-Douglas production alpha is simply capital's share
-        alpha = (1 - model.data.labsh.loc[start:end]).mean() 
-                
-        # adjust measure of TFP to remove human capital contribution
-        model.data['atfpna'] = A**(1 / (1 - alpha)) * H
-        
-        # regress log TFP on linear time trend
-        res   = pd.ols(y=np.log(model.data.atfpna.loc[start:end]), x=trend)
-        g     = res.beta[0]
-        A0    = np.exp(res.beta[1])
-        
-    else:
-        
-        def objective(params):
-            """Optimize to find alpha and sigma."""
-            alpha = params[0]
-    	    sigma = params[1]
-            gamma = (sigma - 1) / sigma
+    Y = model.data.rgdpna
     
-            A = model.data.rtfpna.loc[start:end]
-            Y = model.data.rgdpna.loc[start:end]
-            K = model.data.rkna.loc[start:end]
-            L = model.data.emp.loc[start:end]
-            H = model.data.hc.loc[start:end]
+    # back out implied productivity series
+    denominator = (K / K.loc[base])**exponent * (L / L.loc[base])**(1 - exponent)
+    A = ((Y / Y.loc[base]) / denominator)**(1 / (1 - exponent))
     
-            # adjust measure of TFP to remove human capital contribution 
-            A_tilde = ((K / L) * (((A**gamma * (K / L)**(-gamma * (1 - alpha)) * 
-                       H**(gamma * (1 - alpha))) - alpha) / (1 - alpha))**(1 / gamma)) 
+    return A    
+ 
+def ces_capitals_share(model, ces_params):
+    """Capital's share of output/income for CES production function."""
+    # extract parameters
+    alpha, sigma = ces_params
+    rho = (sigma - 1) / sigma
     
-            y = (Y / (A_tilde * L))
-            k = (K / (A_tilde * L))
+    # extract model data
+    K = model.data.rkna
+    L = model.data.emp
     
-            # remove the discontinuity 
-            if abs(gamma) < 1e-6:
-                rss = np.log(y) - alpha * np.log(k)
-            else:
-                rss = np.log(y) - (1 / gamma) * np.log(alpha * k**gamma + (1 - alpha))
-            return rss
-            
-        # solve the non-linear least squares problem         
-        res = optimize.leastsq(objective, [alpha0, sigma0], full_output=True)
-        
-        # extract parameter estimates
-        alpha, sigma = res[0]
-        
-        # print the total sum of squares
-        tss = np.sum(res[2]['fvec']**2)
-        print 'Total sum of squares:', tss
-        
-        # print info about estimation success/failure
-        if res[4] in [1, 2, 3, 4]:
-            print 'Sucessful estimation of sigma and alpha:', res[3]
-        else:
-            print 'Estimation of sigma and alpha failed!', res[3]      
-            print 'Parameters will be calibrated using your initial condition.'
-             
-        # adjust measure of TFP to remove human capital contribution    
-        gamma = (sigma - 1) / sigma
-        model.data['atfpna'] = ((K / L) * (((A**gamma * (K / L)**(-gamma * (1 - alpha)) * 
-                                H**(gamma * (1 - alpha))) - alpha) / (1 - alpha))**(1 / gamma)) 
-        
-        # regress log TFP on linear time trend
-        res   = pd.ols(y=np.log(model.data.atfpna.loc[start:end]), 
-                       x=trend.loc[start:end])
-                   
-        g     = res.beta[0]
-        A0    = np.exp(res.beta[1])
+    # compute capital's share of income
+    epsilon_k = (alpha * K**rho / (alpha * K**rho + (1 - alpha) * L**rho))
     
-    #### estimate the coefficient or relative risk aversion #####
-    
-    # theta is chosen in order to match average K/Y ratio
-    capital_output_ratio = (model.data.rkna.loc[start:end] / 
-                            model.data.rgdpna.loc[start:end])
-    target1 = capital_output_ratio.mean()
-        
-    def objective2(theta):
-        """Defines model predicted capital-output ratio on BGP."""
-        # define a dictionary of temporary params
-        tmp_params = {'alpha':alpha, 'delta':delta, 'rho':rho, 'n':n, 'g':g,
-                      'theta':theta, 'sigma':sigma}
-                      
-        # extract tmp bgp values
-        tmp_k_star = model.steady_state.functions['k_star'](tmp_params)
-        tmp_y_star = model.output(0, tmp_k_star, tmp_params)
-
-        # compare model prediction to target
-        out = (tmp_k_star / tmp_y_star) - target1
-            
-        return out
-    
-    res   = optimize.root(objective2, theta0, method='hybr')
-    
-    # extract the parameter results
-    theta = res.x[0]
-    
-    if res.success == True:
-        print 'Calibration of theta successful!', res.message
-    else:
-        print 'Calibration of theta failed:', res.message
-        print 'Parameter will be calibrated using your initial condition.'
-         
-    # create a dictionary of model parameters
-    params = {'alpha':alpha, 'sigma':sigma, 'delta':delta, 'theta':theta, 
-              'rho':rho, 'n':n, 'L0':L0, 'g':g, 'A0':A0}
-              
-    # update the model's parameters
-    model.update_model_parameters(params)
-                    
-    # compute new steady state values
-    model.steady_state.set_values()
+    return epsilon_k

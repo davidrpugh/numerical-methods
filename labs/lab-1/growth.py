@@ -13,7 +13,7 @@ import pwt
           
 class SolowModel(solvers.IVP):
     """Base class for the Solow (1956) model of growth."""
-    pwt_data, pwt_dep_rates = pwt.load_pwt_data(deltas=True)
+    pwt_data = pwt.load_pwt_data()
         
     def __init__(self, output, mpk, k_dot, jacobian, params=None):
         """
@@ -666,8 +666,7 @@ def calibrate_cobb_douglas(model, iso3_code, bounds=None):
     model.iso3_code = iso3_code
         
     # get the PWT data for the iso_code
-    model.data      = model.pwt_data.minor_xs(iso3_code)
-    model.dep_rates = model.pwt_dep_rates.minor_xs(iso3_code)
+    model.data      = model.pwt_data.major_xs(iso3_code)
     
     # set bounds
     if bounds == None:
@@ -708,7 +707,7 @@ def calibrate_cobb_douglas(model, iso3_code, bounds=None):
     ##### estimate the depreciation rate for total capital #####
         
     # use average depreciation rate for total capital
-    delta = model.dep_rates.delta_k.loc[start+1:end].mean()   
+    delta = model.data.delta_k.loc[start:end].mean()   
          
     # create a dictionary of model parameters
     params = {'s':s, 'alpha':alpha, 'delta':delta, 'n':n, 'L0':L0, 'g':g,
@@ -755,8 +754,7 @@ def calibrate_ces(model, iso3_code, x0, base=2005, bounds=None, method='COBYLA',
     model.iso3_code = iso3_code
         
     # get the PWT data for the iso_code
-    model.data      = model.pwt_data.minor_xs(iso3_code)
-    model.dep_rates = model.pwt_dep_rates.minor_xs(iso3_code)
+    model.data      = model.pwt_data.major_xs(iso3_code)
     
     # set bounds for calibration data
     if bounds == None:
@@ -771,7 +769,7 @@ def calibrate_ces(model, iso3_code, x0, base=2005, bounds=None, method='COBYLA',
     L       = model.data.emp.loc[start:end]
     Y       = model.data.rgdpna.loc[start:end]
     I_share = model.data.csh_i.loc[start:end]
-    K_dep   = model.dep_rates.delta_k.loc[start+1:end]
+    K_dep   = model.data.delta_k.loc[start:end]
     
     # compute adjusted measure of TFP 
     model.data['atfpna'] = (model.data.rtfpna**(1 / model.data.labsh) * 

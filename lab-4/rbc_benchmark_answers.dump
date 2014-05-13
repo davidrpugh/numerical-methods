@@ -1,0 +1,50 @@
+var K C Z Y I W r L zero_profit;
+
+varexo eps_z;
+
+parameters b alpha beta delta sigma theta omega rho_z KSS LSS YSS;
+
+b=2;
+alpha=0.4;
+beta=0.9896;
+delta=0.025;
+sigma=0.75;
+theta=2.5;
+omega=1.5;
+rho_z=0.95;
+KSS=0.07080687506762097;
+LSS=0.3317996814723058;
+YSS=0.1788775138127046;
+
+
+model;
+// Equation 0
+0 = Y - exp(Z) * ((alpha * (K(-1) ^ ((sigma - 1) / sigma)) + (1 - alpha) * (L ^ ((sigma - 1) / sigma))) ^ (sigma / (sigma - 1)));
+// Equation 1
+0 = Z - (rho_z * Z(-1) + eps_z);
+// Equation 2
+0 = W - Y * (((1 - alpha) * (L ^ (-(1) / sigma))) / (alpha * (K(-1) ^ ((sigma - 1) / sigma)) + (1 - alpha) * (L ^ ((sigma - 1) / sigma))));
+// Equation 3
+0 = r - Y * ((alpha * (K(-1) ^ (-(1) / sigma))) / (alpha * (K(-1) ^ ((sigma - 1) / sigma)) + (1 - alpha) * (L ^ ((sigma - 1) / sigma))));
+// Equation 4
+0 = zero_profit - (Y - L * W - K(-1) * r);
+// Equation 5
+0 = C + I - (L * W + K(-1) * r);
+// Equation 6
+0 = K - (I + K(-1) * (1 - delta));
+// Equation 7
+0 = C ^ -(theta) - (beta * (C(1) ^ -(theta))) * (1 + r(1) - delta);
+// Equation 8
+0 = b * ((1 - L) ^ -(omega)) - W * (C ^ -(theta));
+end;
+initval;
+Y=0.1788775138127046;
+I=0.07080687506762097;
+W=0.3234677857777899;
+L=0.3317996814723058;
+zero_profit=0;
+K=0.07080687506762097;
+Z=0;
+C=0.1080706387450836;
+r=1.01050929668553;
+end;

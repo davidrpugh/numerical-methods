@@ -13,7 +13,7 @@ import pwt
           
 class SolowModel(solvers.IVP):
     """Base class for the Solow (1956) model of growth."""
-    pwt_data, pwt_dep_rates = pwt.load_pwt_data(deltas=True)
+    pwt_data = pwt.load_pwt_data()
         
     def __init__(self, output, mpk, k_dot, jacobian, params=None):
         """

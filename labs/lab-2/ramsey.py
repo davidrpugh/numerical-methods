@@ -428,7 +428,7 @@ class Model(solvers.IVP):
                    parameter; values > 1 correspond to increasing the current 
                    value of the parameter.
                    
-            T:     (float) Length of the impulse response. Default is 40.
+            T:     (float) Length of the impulse response. Default is 100.
             
             kind:  (str) Whether you want impulse response functions in 'levels',
                    'per_capita', or 'efficiency_units'. Default is for irfs to

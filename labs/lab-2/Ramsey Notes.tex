@@ -1,0 +1,364 @@
+\documentclass[11pt]{article}
+\usepackage{geometry}                % See geometry.pdf to learn the layout options. There are lots.
+\geometry{letterpaper}                   % ... or a4paper or a5paper or ... 
+%\geometry{landscape}                % Activate for for rotated page geometry
+%\usepackage[parfill]{parskip}    % Activate to begin paragraphs with an empty line rather than an indent
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{mathtools}
+\usepackage{amssymb}
+\usepackage{epstopdf}
+\usepackage{hyperref}
+\DeclareGraphicsRule{.tif}{png}{.png}{`convert #1 `dirname #1`/`basename #1 .tif`.png}
+
+\title{Teaching Notes: Real Business Cycle Theory}
+\author{David R. Pugh}
+\date{\today}                                           % Activate to display a given date or no date
+
+\begin{document}
+\maketitle
+
+\appendix
+\section{The models}
+In this appendix I fully specify the decision problems faced by firms and households in the stochastic optimal growth models described in the main body of the paper. Unlike the standard stochastic growth models studied in ?? and ??, the models I consider in this paper have two sources of growth. Total population, $N$, grows exogenously at rate $n$ per period.
+	\begin{equation}\label{eq:popGrowth}
+		N_{t+1} = (1 + n)N_t
+	\end{equation}
+The level of technology, $A$, meanwhile, exhibits persistent fluctuations around an underlying deterministic trend growth rate of $g$ per period
+	\begin{align}\label{eq:techProcess}
+		\ln A_{t} =& \ln\bar{A} + t\ln(1 + g) + \ln z_{t} \notag \\
+		\ln z_{t} =& \rho \ln z_{t-1} + \epsilon_{t}
+	\end{align}
+
+\subsection{Firms}
+There are a large number of identical firms, each with access to the same constant returns to scale, Cobb-Douglas production technology.
+	\begin{equation}\label{eq:prodFunction}
+		Y_{t} = K_{t-1}^{\alpha}\left(A_{t}L_{t}\right)^{1-\alpha}
+	\end{equation}
+where $\alpha$ is capital's share of output. 
+
+The firm problem is static.  Each period, a firm chooses demands for capital and labor in order to maximize profits subject to the constraint imposed by their production function.
+	\begin{equation}
+		\max_{K_{t-1}, L_t}\ \Pi = K_{t-1}^{\alpha}\left(A_{t}L_{t}\right)^{1-\alpha} - [W_{t}L_{t} + (r_{t} + \delta)K_{t-1}]
+	\end{equation}
+	
+Assumption of perfect competition in the production of output goods implies that inputs to production are paid their marginal products.  Thus the real wage in period $t$, $W_{t}$, and the real return to capital in period $t$ (net depreciation), $r_{t}$ are:
+	\begin{align}
+		W_{t} =& (1-\alpha)\left(\frac{K_{t-1}}{A_{t}L_{t}}\right)^\alpha A_{t} \label{eq:realWage} \\
+		r_{t} =& \alpha\left(\frac{A_{t}L_{t}}{K_{t-1}}\right)^{1-\alpha} - \delta  \label{eq:realReturnCapital} 
+	\end{align}
+	
+Because both technology and population are growing I need to de-trend equation \ref{eq:prodFunction}.  The intensive form of the production function expresses output \textit{per effective person}, $y=\frac{Y}{AN}$ in terms of capital per effective person, $k=\frac{K}{AN}$, and per person labor supply $l=\frac{L}{N}$ follows.
+	\begin{align}
+	         y_t =& \frac{Y_t}{A_t N_t} = \left(\frac{K_{t-1}}{A_t N_t}\right)^{\alpha}\left(\frac{L_{t}}{N_t}\right)^{1-\alpha} \notag \\
+	         =&\left(\frac{1}{(1 + g)\left(\frac{z_t}{z_{t-1}}\right)(1 + n)}\right)^{\alpha}\left(\frac{K_{t-1}}{A_{t-1}N_{t-1}}\right)^\alpha \left(\frac{L_{t}}{N_{t}}\right)^{1-\alpha} \notag \\
+	         =& \left(\frac{k_{t-1}}{(1 + g)\left(\frac{z_t}{z_{t-1}}\right)(1 + n)}\right)^{\alpha}l_t^{1 - \alpha}
+	 \end{align}
+
+Similarly, I re-write equations \ref{eq:realWage} and \ref{eq:realReturnCapital} as follows.
+	\begin{align}
+		w_{t} =& \frac{W_{t}}{A_{t}} = (1-\alpha)\left(\frac{K_{t-1}}{A_{t}L_{t}}\right)^\alpha \notag \\
+		=& (1-\alpha)\left(\frac{K_{t-1}}{A_{t}N_{t}}\right)^\alpha \left(\frac{N_{t}}{L_{t}}\right)^{\alpha} \notag \\
+		=& (1-\alpha)\left(\frac{1}{(1 + g)\left(\frac{z_t}{z_{t-1}}\right)(1 + n)}\right)^{\alpha}\left(\frac{K_{t-1}}{A_{t-1}N_{t-1}}\right)^\alpha \left(\frac{N_{t}}{L_{t}}\right)^{\alpha} \notag \\
+		=& (1-\alpha)\left(\frac{k_{t-1}}{(1 + g)\left(\frac{z_t}{z_{t-1}}\right)(1 + n)}\right)^{\alpha} l_{t}^{-\alpha} \label{eq:inelastic-MPL} \\
+		r_{t} =& \alpha\left(\frac{A_{t}L_{t}}{K_{t-1}}\right)^{1-\alpha} - \delta\notag \\
+		=& \alpha\left(\frac{A_{t}N_{t}}{K_{t-1}}\right)^{1-\alpha} \left(\frac{L_{t}}{N_{t}}\right)^{1 - \alpha} - \delta\notag \\
+		=& \alpha\left((1 + g)\left(\frac{z_t}{z_{t-1}}\right)(1 + n)\right)^{1-\alpha}\left(\frac{A_{t-1}N_{t-1}}{K_{t-1}}\right)^{1-\alpha} \left(\frac{L_{t}}{N_{t}}\right)^{1 - \alpha} - \delta\notag \\
+		=& \alpha \left(\frac{k_{t-1}}{(1 + g)\left(\frac{z_t}{z_{t-1}}\right)(1 + n)}\right)^{\alpha-1} l_{t}^{1 - \alpha} - \delta  \label{eq:inelastic-MPK}
+	\end{align}
+	
+Also, note that the assumption of constant returns to scale in the production technology implies that a firm's optimal choices of results in zero profits.
+	\begin{equation}
+		y_{t} = w_{t}l_{t} + (r_{t} + \delta)\left(\frac{1}{(1 + g)\left(\frac{z_t}{z_{t-1}}\right)(1 + n)}\right)k_{t-1}
+	\end{equation}
+
+\subsection{Households in a model with inelastic labor}
+There are a large number of identical households.  Each member of the household is endowed with one unit of labor which is supplied inelastically to firms.   The representative household has constant relative risk aversion (CRRA) preferences over consumption per person.
+	\begin{equation}\label{eq:HHlifetimeUtility}
+		E\left\{\sum_{t=0}^{\infty} \beta^t \frac{\frac{C_t}{N_t}^{1-\theta}}{1-\theta} \frac{N_{t}}{H}\right\}
+	\end{equation}
+The parameter $0 < \beta < 1$ is the standard discount factor; $N_{t}$ is the total population of the economy at date $t$; $H$ is the number of households (which implies that $\frac{N_{t}}{H}$ is the number of individuals per household in the economy).  The household faces the following constraints.  The \textit{end-of-period} capital stock per member of household evolves according to:
+	\begin{equation}\label{eq:motionCapital}
+		\frac{N_{t+1}}{H}\frac{K_t}{N_{t+1}} = \frac{N_t}{H}\left[(1 - \delta)\frac{K_{t-1}}{N_t} + \frac{I_{t}}{N_t}\right] 
+	\end{equation}
+The flow budget constraint facing this household is:
+	\begin{equation}\label{eq:HHflowBudgetConstraint}
+		\frac{N_{t}}{H}\left[\frac{C_{t}}{N_{t}} + \frac{I_{t}}{N_{t}}\right] = \frac{N_{t}}{H}\left[W_{t} + (r_{t} + \delta)\frac{K_{t-1}}{N_t}\right]  
+	\end{equation}
+The right hand side of equation \label{eq:HHflowBudgetConstraint} is household income; the left hand side is household expenditure (which takes the form of either consumption, or investment).\footnote{Note that the household has two sources of income! Labor wages and rental income from the capital.} Combing these two constraints yields:
+	\begin{equation}
+		\frac{C_{t}}{N_{t}} + \frac{K_t}{N_t} = W_{t} + \frac{(1 + r_{t})}{(1+n)}\frac{K_{t-1}}{N_{t-1}} 
+	\end{equation}
+	
+Because of population growth and technological progress, I de-trend the household decision problem by re-writing equations \ref{eq:HHlifetimeUtility} and \ref{eq:HHflowBudgetConstraint} in per effective person units.  The intensive form of the household's decision problem is:
+        \begin{align}\label{eq:intensive-HH-utility}
+		%&E\left\{\sum_{t=0}^{\infty} \beta^t \frac{(c_tA_t)^{1-\theta}}{1-\theta} \frac{N_{t}}{H}\right\} \notag \\
+		%&E\left\{\sum_{t=0}^{\infty} [\beta(1+n)]^t \frac{(c_tA_t)^{1-\theta}}{1-\theta} \frac{N_{0}}{H}\right\} \notag \\
+		%&E\left\{\sum_{t=0}^{\infty} [\beta(1+n)]^t \frac{\left(c_t(1+ g)^t z_t\frac{A_0}{z_0}\right)^{1-\theta}}{1-\theta} \frac{N_{0}}{H}\right\} \notag \\
+		%&E\left\{\sum_{t=0}^{\infty} [\beta(1+g)^{1-\theta}(1+n)]^t \frac{\left(c_t z_t\right)^{1-\theta}}{1-\theta} \frac{A_0}{z_0}\frac{N_{0}}{H}\right\} \notag \\
+		&\max_{\left\{c_t\right\}} E\left\{\sum_{t=0}^{\infty} [\beta(1+g)^{1-\theta}(1+n)]^t \frac{\left(c_t z_t\right)^{1-\theta}}{1-\theta} \right\}
+	\end{align}
+subject to 
+	\begin{align}
+		c_t + k_t= w_t + (1 + r_t)\left(\frac{1}{(1 + g)\left(\frac{z_t}{z_{t-1}}\right)(1 + n)}\right)k_{t-1}\notag
+	\end{align}
+	
+The Lagrangian for this optimization problem is:
+	\begin{align}
+		E\Bigg\{\sum_{t=0}^{\infty} [\beta(1+g)^{1-\theta}(1+n)]^t\Bigg(&\frac{\left(c_t z_t\right)^{1-\theta}}{1-\theta} + \notag \\
+		&\lambda_{t} \left[w_t + (1 + r_t)\left(\frac{1}{(1 + g)\left(\frac{z_t}{z_{t-1}}\right)(1 + n)}\right)k_{t-1} - c_t - k_t\right]\Bigg)\Bigg\} \notag
+	\end{align}
+Corresponding first-order necessary conditions for for the optimal choice of $c$ are:
+	\begin{align}
+		\frac{\partial \mathcal{L}}{\partial c_{t+s}}:& (c_{t+s}z_{t+s})^{-\theta}z_{t+s} - \lambda_{t+s} = 0 \notag 
+	\end{align}
+The Lagrange multiplier, $\lambda_{t+s}$ evolves according to:
+	\begin{align}
+		\frac{\partial \mathcal{L}}{\partial k_{t+s}}:& \lambda_{t+s} = \beta(1+g)^{-\theta} E_{t+s}\left\{\lambda_{t+s+1}\left(\frac{z_{t+s}}{z_{t+s+1}}\right)(1 + r_{t+s+1})\right\} \notag
+	\end{align}
+Combining these two equations yields the consumption Euler equation
+	\begin{align}\label{eq:inelastic-euler}
+		1= \beta(1+g)^{-\theta} E_{t}\left\{\left(\frac{c_{t+1}z_{t+1}}{c_t z_t}\right)^{-\theta}(1 + r_{t+1})\right\}
+	\end{align}
+which, together with the constraint
+	\begin{align}\label{eq:inelastic-HH-constraint}
+		c_t + k_t = w_t + (1 + r_t)\left(\frac{1}{(1 + g)\left(\frac{z_t}{z_{t-1}}\right)(1 + n)}\right)k_{t-1}
+	\end{align}
+completely describes the optimal behavior of households.
+
+\subsection{Equilibrium}
+Combining equations \ref{eq:inelastic-euler} and \ref{eq:inelastic-HH-constraint} with the equations for the real wage, equation \ref{eq:inelastic-MPL}, and the net interest rate, equation \ref{eq:inelastic-MPK} yields the following system of two non-linear equations in two unknowns, $c$ and $k$.%\footnote{Alternatively one could specify the model as a system of seven non-linear equations in the seven unknowns, $y$, $c$, $i$, $k$, $w$, $r$, $z$, as follows. 
+%	\begin{align}
+%	         y_t =& c_t + i_t \notag \\
+%	         y_t =& \left(\frac{z_{t-1}k_{t-1}}{(1 + g)(1 + n)z_t}\right)^{\alpha} \notag \\
+%              w_t =& (1-\alpha)\left(\frac{z_{t-1}k_{t-1}}{(1 + g)(1 + n)z_t}\right)^{\alpha} \notag \\
+%		r_t =& \alpha \left(\frac{z_{t-1} k_{t-1}}{(1 + g)(1 + n)z_t}\right)^{\alpha-1} - \delta \notag \\
+%		1=& \beta(1+g)^{-\theta} E_{t}\left\{\left(\frac{c_{t+1}z_{t+1}}{c_t z_t}\right)^{-\theta}(1 + r_{t+1})\right\} \notag \\
+%		k_t =& (1 - \delta)\left(\frac{z_{t-1}k_{t-1}}{(1 + g)(1 + n)z_t}\right) + i_t \notag \\
+%		\ln z_t =& \rho \ln z_{t-1} + \epsilon_t \notag
+%	\end{align}}
+	\begin{align}
+		1=& \beta(1+g)^{-\theta} E_{t}\left\{\left(\frac{c_{t+1}z_{t+1}}{c_t z_t}\right)^{-\theta}\left[1 + \alpha \left(\frac{k_{t}}{(1 + g)\left(\frac{z_{t+1}}{z_t}\right)(1 + n)}\right)^{\alpha-1} - \delta\right]\right\} \\
+		k_t =& (1 - \delta)\left(\frac{k_{t-1}}{(1 + g)\left(\frac{z_t}{z_{t-1}}\right)(1 + n)}\right) +  \left(\frac{k_{t-1}}{(1 + g)\left(\frac{z_t}{z_{t-1}}\right)(1 + n)}\right)^{\alpha} - c_t
+	 \end{align}
+	 
+\subsection{Dynamic programming specification}
+The stochastic optimal growth model with inelastic labor supply can be written as a dynamic programming problem with two \textit{end-of-period} state variables, $k$ and $z$.\footnote{There are two state variables because the productivity shock, $z$, is correlated.} Using equation \ref{eq:intensive-HH-utility}, the dynamic programming formulation of the household's decision problem can be written as
+	\begin{align}\label{eq:inelastic-bellman}
+		V(k, z) =& \beta(1+g)^{1-\theta}(1+n) E\left\{\max_{c'}   \frac{\left(c' z'\right)^{1-\theta}}{1-\theta} + V(k', z') | z\right\} \\
+		c' + k' =& w' + (1 + r')\left(\frac{1}{(1 + g)\left(\frac{z'}{z}\right)(1 + n)}\right)k \notag \\
+		\ln z' =& \rho \ln z + \epsilon' \notag
+	\end{align}
+where the choice of the control, $c'$, occurs \textit{after} the realization of the productivity shock, $z'$.
+
+To illustrate the timing of the problem,  it is helpful to break equation \ref{eq:inelastic-bellman} into two sub-problems.
+	\begin{align}
+		V(k, z) =& \beta(1+g)^{1-\theta}(1+n) E\left\{W(k, z') | z\right\} \label{eq:inelastic-subproblem1} \\
+		W(k, z') =& \max_{c'}  \frac{\left(c' z'\right)^{1-\theta}}{1-\theta} + V(k',  z') \label{eq:inelastic-subproblem2}
+	\end{align}
+After the realization of the productivity shock, $z'$, the optimal policy for choosing consumption per effective person, $c(k, z')$, obeys the following first-order necessary conditions.
+	\begin{align}\label{eq:inelastic-subproblem2-FOC}
+		0 = [c(k, z') z']^{-\theta}z' - V'(k', z')
+	\end{align}
+The envelope theorem applied to equation \ref{eq:inelastic-subproblem2} yields:
+	\begin{align}
+		W'(k, z') = (1 + r')\left(\frac{1}{(1 + g)\left(\frac{z'}{z}\right)(1 + n)}\right)V'(k', z')
+	\end{align}
+Combining these two equations yields the following first-order condition.
+	\begin{equation}\label{eq:inelastic-subproblem2-combined-FOC}
+		W'(k, z') = (1 + r')\left(\frac{1}{(1 + g)\left(\frac{z'}{z}\right)(1 + n)}\right)[c(k, z') z']^{-\theta}z'
+	\end{equation}
+	
+The envelope theorem applied to equation \ref{eq:inelastic-subproblem1} yields:
+	\begin{equation}
+		V'(k, z) = \beta (1 + g)^{1-\theta}(1 + n) E\left\{W'(k, z') | z\right\}
+	\end{equation}
+Using equation \ref{eq:inelastic-subproblem2-combined-FOC} to substitute for $W'(k, z')$ yields:
+	\begin{equation}
+		V'(k, z) = \beta (1 + g)^{-\theta} E\left\{(1 + r')[c(k, z') z']^{-\theta}z | z\right\}
+	\end{equation}
+Using equation \ref{eq:inelastic-subproblem2-FOC} to substitute for $V'(k, z)$, and iterating the result forward one period yields the dynamic programming formulation of equation \ref{eq:inelastic-euler} (the consumption Euler equation from the sequential problem):
+	\begin{equation}
+		1 = \beta (1 + g)^{-\theta} E\left\{\left(\frac{c(k', z'') z''}{c(k, z') z'}\right)^{-\theta} (1 + r'') \bigg| z'\right\}
+	\end{equation}
+	
+The solution of the household's dynamic programming problem is completely specified by a value function $V(k, z)$ and a policy function $c(k, z')$ that jointly satisfy
+	\begin{align}
+		V(k_, z) =& \beta(1+g)^{1-\theta}(1+n) E\left\{\frac{\left(c(k, z')z'\right)^{1-\theta}}{1-\theta} + V(k', z') \bigg| z\right\} \\
+		1 =& \beta (1 + g)^{-\theta} E\left\{\left(\frac{c(k', z'') z''}{c(k, z') z'}\right)^{-\theta} (1 + r'') \bigg| z'\right\}
+	\end{align}
+while taking as given the laws of motion for the state variables, $k$ and $z$.
+	\begin{align}
+		k' =& w' + (1 + r')\left(\frac{1}{(1 + g)\left(\frac{z'}{z}\right)(1 + n)}\right)k - c'\notag \\
+		\ln z' =& \rho \ln z + \epsilon' \notag
+	\end{align}
+	
+\section{Elastic labor supply}
+
+\subsection{Households in a model with elastic labor}
+When labor supply is elastic the representative household maximizes:
+	\begin{equation}\label{eq:HHlifetimeUtility}
+		E\left\{\sum_{t=0}^{\infty} \beta^t \frac{\left[\frac{C_t}{N_t}^{\omega} \left(1 - \frac{L_t}{N_t}\right)^{1-\omega}\right]^{1-\theta}}{1-\theta} \frac{N_{t}}{H}\right\}
+	\end{equation}
+The parameter $\beta$ is the discount \textit{factor}; $N_{t}$ is the population of the economy at date $t$; $H$ is the number of households (which implies that $\frac{N_{t}}{H}$ is the number of individuals per household in the economy).  The population $N_{t}$ is assumed to grow exogenously at rate $n$.
+	\begin{equation}\label{eq:popGrowth}
+		N_{t} = (1 + n)N_{t}  
+	\end{equation}
+	
+Recall that the household objective function is given by equation \ref{eq:HHlifetimeUtility}:
+	\begin{equation}
+		E\left\{\sum_{t=0}^{\infty} \beta^t \frac{\frac{C_t}{N_t}^{1-\theta}}{1-\theta} \frac{N_{t}}{H}\right\} \notag
+	\end{equation}
+Because of technology growth, $\frac{C_{t}}{N_{t}}$ is growing at rate $g$ along balance growth path. Thus in order to work with variables that will have constant steady state values, we will want to express \ref{eq:HHlifetimeUtility} as follows:
+	\begin{align}
+		&E\left\{\sum_{t=0}^{\infty} \beta^t \frac{(c_tA_t)^{1-\theta}}{1-\theta} \frac{N_{t}}{H}\right\} \notag \\
+		&E\left\{\sum_{t=0}^{\infty} [\beta(1+n)]^t \frac{(c_tA_t)^{1-\theta}}{1-\theta} \frac{N_{0}}{H}\right\} \notag \\
+		&E\left\{\sum_{t=0}^{\infty} [\beta(1+n)]^t \frac{\left(c_t(1+ g)^t z_t\frac{A_0}{z_0}\right)^{1-\theta}}{1-\theta} \frac{N_{0}}{H}\right\} \notag \\
+		&E\left\{\sum_{t=0}^{\infty} [\beta(1+g)^{1-\theta}(1+n)]^t \frac{\left(c_t z_t\right)^{1-\theta}}{1-\theta} \frac{A_0}{z_0}\frac{N_{0}}{H}\right\} \notag \\
+		&E\left\{\sum_{t=0}^{\infty} [\beta(1+g)^{1-\theta}(1+n)]^t \frac{\left(c_t z_t\right)^{1-\theta}}{1-\theta} \right\}
+	\end{align}
+where $c_{t}$ is \textit{consumption per effective member of the household}.\footnote{Again, by consumption per effective worker I mean $c = \frac{C}{AN}$.}
+
+The household faces the following two constraints.  The \textit{end-of-period} capital stock per member of household evolves according to:
+	\begin{equation}\label{eq:motionCapital}
+		\frac{N_{t+1}}{H}\frac{K_t}{N_{t+1}} = \frac{N_t}{H}\left[(1 - \delta)\frac{K_{t-1}}{N_t} + \frac{I_{t}}{N_t}\right] \notag
+	\end{equation}
+The flow budget constraint facing this household is:
+	\begin{equation}\label{eq:HHflowBudgetConstraint}
+		\frac{N_{t}}{H}\left[W_{t} + (r_{t} + \delta)\frac{K_{t-1}}{N_t}\right] = \frac{N_{t}}{H}\left[\frac{C_{t}}{N_{t}} + \frac{I_{t}}{N_{t}}\right] \notag 
+	\end{equation}
+The LHS of the above equation is household income; the RHS is household expenditure (which takes the form of either consumption, or investment).\footnote{Note that the household has two sources of income! Labor wages and rental income from the capital.} We can simplify our life by combining the two constraints as follows.\footnote{In combining these two constraints we are eliminating household investment as a choice variable!}
+	\begin{equation}
+		\frac{K_t}{N_t} = \frac{(1 - \delta)}{(1 + n)}\frac{K_{t-1}}{N_{t-1}} + W_{t} + \frac{(r_{t} + \delta)}{(1+n)}\frac{K_{t-1}}{N_{t-1}} -  \frac{C_{t}}{N_{t}}\notag
+	\end{equation}
+Now we need to re-write this constraint in terms of \textit{per effective member} of household units:
+	\begin{align}
+		k_t= w_t + (1 + r_t)\left(\frac{z_{t-1}k_{t-1}}{(1 + g)(1 + n)z_t}\right) - c_t\notag
+	\end{align}
+	
+The household will want to choose sequences of  consumption per effective member of household based on all relevant information in order to maximize its \textit{expected} lifetime utility subject to the constraint while taking prices as given.  The Lagrangian for this optimization problem is:
+	\begin{align}
+		&E\Bigg\{\sum_{t=0}^{\infty} [\beta(1+g)^{1-\theta}(1+n)]^t\Bigg(\frac{\left(c_t z_t\right)^{1-\theta}}{1-\theta} + \lambda_{t} \left[w_t + (1 + r_t)\left(\frac{z_{t-1}k_{t-1}}{(1 + g)(1 + n)z_t}\right) - c_t - k_t\right]\Bigg)\Bigg\} \notag
+	\end{align}
+Corresponding first-order conditions for $c_{t+s}$ are:
+	\begin{align}
+		\frac{\partial \mathcal{L}}{\partial c_{t+s}}:& (c_{t+s}z_{t+s})^{-\theta}z_{t+s} - \lambda_{t+s} = 0 \notag 
+	\end{align}
+The Lagrange multiplier, $\lambda_{t+s}$ evolves according to:
+	\begin{align}
+		\frac{\partial \mathcal{L}}{\partial k_{t+s}}:& \lambda_{t+s} = \beta(1+g)^{-\theta} E_{t+s}\left\{\lambda_{t+s+1}\left(\frac{z_t}{z_{t+1}}\right)(1 + r_{t+1})\right\} \notag
+	\end{align}
+
+Combing these two equations yields the consumption Euler equation:
+	\begin{align}\label{eq:elastic-euler}
+		1= \beta(1+g)^{-\theta} E_{t}\left\{\left(\frac{c_{t+1}z_{t+1}}{c_t z_t}\right)^{-\theta}(1 + r_{t+1})\right\}
+	\end{align}
+which, together with the household constraint:
+	\begin{align}\label{eq:elastic-HH-constraint}
+		k_t= w_t + (1 + r_t)\left(\frac{z_{t-1}k_{t-1}}{(1 + g)(1 + n)z_t}\right) - c_t
+	\end{align}
+completely describes the optimal behavior of households.
+
+\section{Analytic solutions}
+In this section I derive the optimal policy and value functions for  models with full depreciation ($\delta=1$) and logarithmic preferences  ($\theta=1$) using the ``guess and verify'' method.
+
+\subsection{Inelastic labor supply}
+With full depreciation and logarithmic preferences the Bellman equation for the model with inelastic labor supply, equation \ref{eq:inelastic-Bellman}, simplifies to
+\begin{align}
+	V(k_{t-1}, z_{t-1}) =& \max_{k_t}  \beta(1+n) E_{t-1}\left\{\ln (c_t z_t) + V(k_t, z_t)\right\} \notag \\
+	k_t =& \left(\frac{z_{t-1}k_{t-1}}{(1 + g)(1 + n)z_t}\right)^{\alpha} - c_t \\
+	\ln z_t =& \rho \ln z_{t-1} + \epsilon_t
+\end{align}
+
+I guess that the true value function is log-linear.
+\begin{equation}
+V(k) = A + B\ln(k)
+\end{equation}
+My guess implies that the Bellman equation can be written as
+\begin{equation}\label{eq:reduced-form-Bellman}
+A + B\ln(k_t) = \ln(c_t) + \beta(1+n)[A + B\ln(k_{t+1})]
+\end{equation}
+and that the optimal policy for choosing $c_{t}$ as a function of the
+current value of the state variable, $k_t$ is 
+\begin{align}
+c(k_t) = \frac{\alpha}{B}k_t^{\alpha}
+\end{align}
+
+Substituting the optimal policy function back into equation
+\ref{eq:reduced-form-Bellman} and collecting terms yields
+\begin{align}
+A + B\ln(k_t) %=& \ln\left(\frac{\alpha}{B}k_t^{\alpha}\right) +
+%\beta(1+n)\left[A + 
+%B\ln\left(\frac{1}{(1+g)(1+n)}\frac{B -
+%    \alpha}{B}k_t^{\alpha}\right)\right]\\ 
+%=& \ln\left(\frac{\alpha}{B}\right) + \alpha\ln(k_t) + \beta(1+n)A +
+%\beta(1+n) B\left[\ln\left(\frac{1}{(1+g)(1+n)}\right) +
+%  \ln\left(\frac{B - \alpha}{B}\right) + \alpha\ln(k_t)\right] \\
+%=& \ln\left(\frac{\alpha}{B}\right) + \alpha\ln(k_t) + \beta(1+n)A +
+%\beta(1+n)B\ln\left(\frac{1}{(1+g)(1+n)}\right) +
+%  \beta(1+n) B\ln\left(\frac{B - \alpha}{B}\right) + \alpha \beta(1+n)
+%  B\ln(k_t) \\
+%=& \ln\left(\frac{\alpha}{B}\right) + \beta(1+n)A +
+%\beta(1+n)B\ln\left(\frac{1}{(1+g)(1+n)}\right) +
+%  \beta(1+n) B\ln\left(\frac{B - \alpha}{B}\right) + \alpha(1 +
+%  \beta(1+n)B)\ln(k_t) \\
+=& \ln\left(\frac{\alpha}{B}\right) + \beta(1+n)\left(A +
+B\left(\ln\left(\frac{1}{(1+g)(1+n)}\frac{B -
+      \alpha}{B}\right)\right)\right) + \\ \notag 
+&\alpha(1 + \beta(1+n)B)\ln(k_t) 
+\end{align}
+which defines a system of two equations in two unknowns $A$ and $B$
+\begin{align}
+A =& \ln\left(\frac{\alpha}{B}\right) + \beta(1+n)\left(A +
+B\left(\ln\left(\frac{1}{(1+g)(1+n)}\frac{B -
+      \alpha}{B}\right)\right)\right) \\  
+B =& \alpha(1 + \beta(1+n)B)
+\end{align}
+whose solutions can be found by applying the method of undetermined
+coefficients.
+\begin{align}
+%A =& \ln\left(\frac{\alpha}{B}\right) + \beta(1+n)\left(A +
+%B\left(\ln\left(\frac{1}{(1+g)(1+n)}\frac{B -
+%      \alpha}{B}\right)\right)\right) \\ \notag
+%A(1 - \beta(1+n))=&\ln(1 - \alpha\beta(1+n)) + \beta(1+n)
+%  B\left(\ln\left(\frac{1}{(1+g)(1+n)}\frac{B - 
+%      \alpha}{B}\right)\right) \\ \notag
+%A=&\frac{\ln(1 - \alpha\beta(1+n))}{(1 - \beta(1+n))} +
+%\frac{\alpha\beta(1+n)}{(1 - \beta(1+n))(1 - \alpha\beta(1+n))}
+%\left(\ln\left(\frac{1}{(1+g)(1+n)}\frac{B-\alpha}{B}\right)\right) \\
+%\notag 
+A=& \frac{\alpha\beta(1+n)}{(1-\beta(1+n))(1-\alpha\beta(1+n))}
+\ln\left(\frac{\alpha\beta}{1+g}\right)  
++ \frac{\ln(1-\alpha\beta(1+n))}{1 - \beta(1+n)} \\
+B =& \frac{\alpha}{1 - \alpha\beta(1+n)}
+\end{align}
+
+Armed with coefficients $A$ and $B$, the optimal consumption policy is
+\begin{align}\label{eq:inelastic-optimal-policy}
+c(k_t) = (1 - \alpha\beta(1+n))k_t^{\alpha}
+\end{align}
+and the value function associated with this optimal policy is
+\begin{align}
+V(k_t) =& \frac{\alpha\beta(1+n)}{(1-\beta(1+n))(1-\alpha\beta(1+n))}
+\ln\left(\frac{\alpha\beta}{1+g}\right)  
++ \frac{\ln(1-\alpha\beta(1+n))}{1 - \beta(1+n)} + \\ \notag
+& \frac{\alpha}{1 - \alpha\beta(1+n)}\ln(k_t)
+\end{align}
+
+As discussed in the main body of the paper, it is often convenient to
+re-define the model so that the control variable is $k_{t+1}$ rather
+than $c_t$. The analytical solution to the optimal policy for choosing
+the value of $k_{t+1}$ as a function of the current value of the state
+variable, $k_t$, can easily be derived from the equation of motion for
+capital per effective worker, equation
+\ref{eq:inelastic-evolution-of-k}, and the optimal policy for
+choosing consumption, equation \ref{eq:inelastic-optimal-policy}.
+\begin{align}
+k_{t+1}(k_t) =& \left(\frac{\alpha\beta}{1+g}\right)k_t^{\alpha}
+\end{align}
+
+\bibliography{/Users/clarissasweet/References/RBC.bib}
+
+\bibliographystyle{chicago}
+			
+\end{document}

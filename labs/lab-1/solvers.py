@@ -220,7 +220,7 @@ class IVP(object):
         
     def get_L2_errors(self, traj1, traj2):
         """
-        Computes a measure of the average difference between two trajectories
+        Computes a measure of the total difference between two trajectories
         using the L^2 norm.
         
         Arguments:
@@ -240,8 +240,7 @@ class IVP(object):
         
     def get_maximal_errors(self, traj1, traj2):
         """
-        Computes a measure of the average difference between two trajectories
-        using the L^oo norm.
+        Computes a measure of the point-wise distance between two trajectories.
         
         Arguments:
             
@@ -253,7 +252,7 @@ class IVP(object):
             maximal_error: (float) Maximal difference between two trajectories.
                       
         """
-        # L^oo norm is the maximal distance
+        # L infinity norm is the maximal distance
         maximal_error = np.max(self.compare_trajectories(traj1, traj2))
         
         return maximal_error   

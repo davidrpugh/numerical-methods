@@ -180,7 +180,8 @@ class SolowModel(solvers.IVP):
         c0 = (1 - orig_params['s']) * y0
         
         # initial padding should be such that shock occurs in year
-        N = year - self.data.index[0]
+        timedelta = pd.datetime(year, 1, 1) - self.data.index[0]
+        N = timedelta.days // 365
         time_padding = np.arange(0, N, 1.0)
         
         # transform irfs into per capita or levels, depending
@@ -255,7 +256,7 @@ class SolowModel(solvers.IVP):
         irf = np.vstack((padding, irf))
         
         # shift the time index forward
-        irf[:N, 0] += self.data.index[0] 
+        irf[:N, 0] += self.data.index[0].year 
         irf[N:, 0] += year - 1
         
         # reset the original params and recompute steady state?

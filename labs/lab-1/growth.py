@@ -615,7 +615,7 @@ class SolowModel(solvers.IVP):
             # y axis labels depend on kind of irfs
             if kind == 'per_capita':
                   
-                ti = traj[:,0] - self.data.index[0]
+                ti = traj[:,0] - self.data.index[0].year
                 gr = self.params['g']
                     
                 axes[i,0].plot(traj[:,0], traj[0,1] * np.exp(gr * ti), 'k--')
@@ -624,7 +624,7 @@ class SolowModel(solvers.IVP):
                                      family='serif')
                                                
             elif kind == 'levels':
-                ti = traj[:,0] - self.data.index[0]
+                ti = traj[:,0] - self.data.index[0].year
                 gr = self.params['n'] + self.params['g']
                     
                 axes[i,0].plot(traj[:,0], traj[0,1] * np.exp(gr * ti), 'k--')

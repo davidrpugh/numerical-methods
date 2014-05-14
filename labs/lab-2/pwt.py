@@ -1,139 +1,87 @@
-from __future__ import division
-import zipfile 
-from urllib import urlopen 
+"""
+Functions for downloading the Penn World Tables (PWT) data from the web and 
+coercing it into a Pandas Panel object for subsequent analysis.
+
+"""
+from __future__ import division 
 from StringIO import StringIO 
+import zipfile
 
 import pandas as pd
+import requests
 
-def get_pwt_data_old(version=71, date='11302012', extract=False):
+def _get_dep_rates_data(base_url, version):
+    """Downloads the depreciation rate data."""
+    tmp_url = base_url + 'v' + str(version) + '/depreciation_rates.zip'
+    tmp_buffer = requests.get(url=tmp_url)
+    tmp_zip = zipfile.ZipFile(StringIO(tmp_buffer.content))
+    tmp_zip.extract('depreciation_rates.dta')
+
+def _get_pwt_data(base_url, version):
+    """Downloads the Penn World Tables (PWT) data."""
+    tmp_url = base_url + 'v' + str(version) + '/pwt' + str(version) + '.zip'
+    tmp_buffer = requests.get(url=tmp_url)
+    tmp_zip = zipfile.ZipFile(StringIO(tmp_buffer.content))
+    tmp_zip.extract('pwt' + str(version) + '.dta')
+  
+def download_pwt_data(base_url='http://www.rug.nl/research/ggdc/data/pwt/', version=80):
     """
-    Load older (i.e., < 8.0) versions of the Penn World Tables data. If no local
-    copy of the data is found, then a copy will be downloaded from the web.
+    Downloads the Penn World Tables (PWT) data.
+    
+    Arguments:
+ 
+        base_url: (str) Base url to use for the download. Current default is:
+            
+                      'http://www.rug.nl/research/ggdc/data/pwt/'
+            
+        version: (int) Version number for PWT data. Default is 80 (which is the 
+                  most recent version).
+                                    
+    """
+    _get_dep_rates_data(base_url, version)
+    _get_pwt_data(base_url, version)
+       
+def load_pwt_data(base_url='http://www.rug.nl/research/ggdc/data/pwt/', version=80):
+    """
+    Load the Penn World Tables (PWT) data as a Pandas Panel object.
 
     Arguments:
  
-        version: (int) Version number for PWT data. Default is 71 (which is the 
-                 most recent version).
-        date:    (str) Date of the version update of the PWT data. Format is 
-                 'mmddyyyy'. Default is '11302012' (which is the most recent 
-                 update of version 71 of PWT).
-        extract: (boolean) Whether or not you wish to save local copy of the 
-                 PWT data in your working directory. Default is False.
-
+        base_url: (str) Base url to use for the download. Current default is:
+            
+                      'http://www.rug.nl/research/ggdc/data/pwt/'
+            
+        version: (int) Version number for PWT data. Default is 80 (which is the 
+                  most recent version).
+                                    
     Returns:
 
-        pwt:    A Pandas Panel object containing the Penn World Tables 
-                Data along with the Solow residuals.
-
-    TODO: Convert time index to datetime object.
-
+        pwt_panel_data: (Panel) A Pandas Panel object containing the Penn World 
+                        Tables (PWT) data (including data on depreciation rates).
+            
     """        
-    # first check for a local copy of PWT
     try: 
-        path = 'pwt' + str(version) + '_wo_country_names_wo_g_vars.csv'
-        pwt = pd.read_csv(path, index_col=['year', 'isocode'])
-
-    # otherwise, download the appropriate zip file 
+        pwt_raw_data = pd.read_stata('pwt' + str(version) + '.dta')
+        dep_rates_raw_data = pd.read_stata('depreciation_rates.dta')
+        
     except IOError:  
-        url = ('http://pwt.econ.upenn.edu/Downloads/pwt' + str(version) + 
-               '/pwt' + str(version) +'_' + date + 'version.zip') 
-        archive = zipfile.ZipFile(StringIO(urlopen(url).read()), 'r') 
-
-        # to extract or not to extract...
-        tmp_file = 'pwt' + str(version) + '_wo_country_names_wo_g_vars.csv'
+        download_pwt_data(base_url, version)        
+        pwt_raw_data = pd.read_stata('pwt' + str(version) + '.dta')
+        dep_rates_raw_data = pd.read_stata('depreciation_rates.dta')
         
-        if extract == True:
-            archive.extractall()
-            pwt = pd.read_csv(tmp_file, index_col=['year', 'isocode'])
-        else:
-            pwt = archive.read(tmp_file)
-            pwt = pd.read_csv(StringIO(pwt), index_col=['year', 'isocode'])         
+    # merge the data
+    pwt_merged_data = pd.merge(pwt_raw_data, dep_rates_raw_data, how='outer', 
+                               on=['countrycode', 'year'])
+
+    # create the hierarchical index
+    pwt_merged_data.year = pd.to_datetime(pwt_raw_data.year, format='%Y')
+    pwt_merged_data.set_index(['countrycode', 'year'], inplace=True)
     
-    # convert to Pandas Panel object
-    pwt = pwt.to_panel()
-    
-    return pwt
+    # coerce into a panel
+    pwt_panel_data = pwt_merged_data.to_panel()
 
-def get_pwt_data(version=80):
-    """
-    Downloads the Penn World Tables database, including all of the necessary
-    STATA programs and DO files for replicating it, into your working directory.
-
-    Arguments:
- 
-        version:  (int) Version number for PWT data. Default is 80 (which is the 
-                  most recent version).
-
-    """        
-    try:
-        # first download the PWT data
-        url = ('http://www.rug.nl/research/GGDC/data/pwt/V' + str(version) +
-               '/pwt' + str(version) + '.zip') 
-        data_archive = zipfile.ZipFile(StringIO(urlopen(url).read()), 'r') 
-
-        # next download the PWT program files
-        url = ('http://www.rug.nl/research/GGDC/data/pwt/V' + str(version) +
-               '/Programs.zip') 
-        programs_archive = zipfile.ZipFile(StringIO(urlopen(url).read()), 'r') 
-
-        # extract the zip archives
-        data_archive.extractall()
-        programs_archive.extractall()
+    return pwt_panel_data
         
-        print 'PWT data and program files successfully downloaded!'
-        
-    except:
-        
-        print 'Download failed! Perhaps you are not connected to the internet?'
-
-def load_pwt_data(version=80, deltas=False):
-    """
-    Load the Penn World Tables data as a Pandas Panel object. Function expects
-    a local copy of the PWT data file in the working directory. If no local copy
-    exists, then one will be downloaded automatically (assuming that you have a
-    working internet connection!).
-
-    Arguments:
- 
-        version:  (int) Version number for PWT data. Default is 80 (which is the 
-                  most recent version).
-                  
-        deltas:   (boolean) Whether or not you wish to load the data on 
-                  depreciation rates (which is included in a separate .dta 
-                  file). Default is False.
-    Returns:
-
-        pwt:    A Pandas Panel object containing the Penn World Tables data.
-        
-    TODO: Work out a way to merge Pandas Panel objects.
-    
-    """        
-    # first check for a local copy of PWT
-    try: 
-        data = pd.read_stata('pwt' + str(version) + '.dta')
-                
-    # otherwise, 
-    except IOError:  
-        get_pwt_data(version)
-        data = pd.read_stata('pwt' + str(version) + '.dta')
-     
-    # convert to a panel object   
-    data.index =[data['year'], data['countrycode']]
-    data = data.to_panel()
-        
-    if deltas == True:
-        
-        # load the separate file containing the depreciation rates
-        dep_rates = pd.read_stata('depreciation_rates.dta')
-        
-        # convert to panel 
-        dep_rates.index = [dep_rates['year'], dep_rates['countrycode']]
-        dep_rates = dep_rates.to_panel()
-
-        return [data, dep_rates]
-        
-    else:
-        
-        return data
-        
-    
+if __name__ == '__main__':
+    pwt_panel_data = load_pwt_data(version=80)
+    print(pwt_panel_data)

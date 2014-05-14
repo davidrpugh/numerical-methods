@@ -15,7 +15,7 @@ import pwt
 class Model(solvers.IVP):
     """Base class for a Ramsey (1928) model of optimal savings."""
     # each instance should carry a copy of the PWT data 
-    pwt_data, pwt_dep_rates = pwt.load_pwt_data(deltas=True)
+    pwt_data = pwt.load_pwt_data()
         
     def __init__(self, output, mpk, k_dot, c_dot, utility, jacobian, params):
         """
@@ -453,7 +453,8 @@ class Model(solvers.IVP):
         w0 = y0 - k0 * r0
         
         # initial padding should be such that shock occurs in '2013'
-        N = 2013 - self.data.index[0] + 1
+        timedelta = pd.datetime(2014, 1, 1) - self.data.index[0]
+        N = timedelta.days // 365
         time_padding = np.arange(0, N, 1.0)
         
         # transform irfs into per capita or levels, depending
@@ -497,7 +498,7 @@ class Model(solvers.IVP):
         padding = np.hstack((padding, (factor * padding_w)[:,np.newaxis]))
         
         # move time padding forward to start of available data
-        padding[:,0] += self.data.index[0]
+        padding[:,0] += self.data.index[0].year
                     
         # shock the parameter
         self.params[param] = shock * self.params[param]
@@ -1425,16 +1426,15 @@ def calibrate_ces(model, iso3_code, bounds=None, sigma0=1.0, alpha0=None,
     model.iso3_code = iso3_code
         
     # get the PWT data for the iso_code
-    model.data      = model.pwt_data.minor_xs(iso3_code)
-    model.dep_rates = model.pwt_dep_rates.minor_xs(iso3_code)
+    model.data      = model.pwt_data.major_xs(iso3_code)
     
     # set bounds
     if bounds == None:
         start = model.data.index[0]
         end   = model.data.index[-1]
     else:
-        start = bounds[0]
-        end   = bounds[1]
+        start = pd.datetime(bounds[0], 1, 1)
+        end   = pd.datetime(bounds[1], 1, 1)
         
     ##### estimate the labor force growth rate #####
         
@@ -1449,7 +1449,7 @@ def calibrate_ces(model, iso3_code, bounds=None, sigma0=1.0, alpha0=None,
     ##### estimate the depreciation rate for total capital #####
         
     # use average depreciation rate for total capital
-    delta = model.dep_rates.delta_k.loc[start+1:end].mean()  
+    delta = model.data.delta_k.loc[start:end].mean()  
        
     ##### estimate alpha, sigma, and g #####
     
